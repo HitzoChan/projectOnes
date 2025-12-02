@@ -1,0 +1,16 @@
+{
+  // Ensure VS Code Dart/Flutter extensions use the correct Flutter SDK
+  "dart.flutterSdkPath": "C:\\dev\\flutter\\flutter",
+  // Optional: ensure a Dart SDK path if needed
+  "dart.sdkPath": "C:\\dev\\flutter\\flutter\\bin\\cache\\dart-sdk",
+  // Exclude large generated folders from analysis to speed up analyzer
+  "dart.analysisExcludedFolders": [
+    "build",
+    ".dart_tool",
+    "android/build",
+    "ios/Flutter/build",
+    "windows/flutter/",
+    "macos/Flutter/",
+    "linux/flutter/"
+  ]
+}
