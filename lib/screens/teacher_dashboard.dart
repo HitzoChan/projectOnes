@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart';
+import 'admin/backfill_attendance_screen.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/auth_provider.dart';
@@ -359,6 +361,22 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                           () => Navigator.pushNamed(context, '/attendance_report'),
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      // Debug-only admin card for backfill
+                      if (kDebugMode)
+                        Expanded(
+                          child: _buildActionCard(
+                            context,
+                            'Admin: Backfill',
+                            'Backfill attendance teacherId',
+                            Icons.backup,
+                            Colors.grey,
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const BackfillAttendanceScreen()),
+                            ),
+                          ),
+                        ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Container(), // Empty container for spacing

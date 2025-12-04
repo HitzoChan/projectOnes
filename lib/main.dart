@@ -78,10 +78,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
               if (userSnapshot.hasData && userSnapshot.data != null) {
                 // User exists in Firestore, navigate to appropriate dashboard
-                final role = userSnapshot.data!.role;
+                final rawRole = userSnapshot.data!.role;
+                final role = rawRole.toString().toLowerCase();
+                debugPrint('Firestore user role for ${snapshot.data!.uid}: $rawRole (normalized: $role)');
                 if (role == 'student') {
                   return const student_dash.StudentDashboard();
-                } else if (role == 'teacher') {
+                } else if (role == 'teacher' || role.contains('teach')) {
                   return const TeacherDashboard();
                 }
               }

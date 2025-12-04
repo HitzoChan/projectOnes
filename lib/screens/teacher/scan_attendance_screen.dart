@@ -20,6 +20,7 @@ class _ScanAttendanceScreenState extends State<ScanAttendanceScreen> {
   String? _selectedSectionId;
   int _recentScans = 0;
   final Set<String> _scannedToday = {};
+  final Set<String> _processingStudents = {};
 
   @override
   void initState() {
@@ -311,7 +312,7 @@ class _ScanAttendanceScreenState extends State<ScanAttendanceScreen> {
   }
 
   Future<void> _processScannedStudentId(String studentId) async {
-    // Prevent duplicate scans
+    // Prevent duplicate scans in this session
     if (_scannedToday.contains(studentId)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -322,6 +323,10 @@ class _ScanAttendanceScreenState extends State<ScanAttendanceScreen> {
       );
       return;
     }
+
+    // Prevent concurrent processing for the same student
+    if (_processingStudents.contains(studentId)) return;
+    _processingStudents.add(studentId);
 
     final firestoreProvider = context.read<FirestoreProvider>();
     
@@ -391,6 +396,7 @@ class _ScanAttendanceScreenState extends State<ScanAttendanceScreen> {
           backgroundColor: Colors.red,
         ),
       );
+      _processingStudents.remove(studentId);
     }
   }
 
