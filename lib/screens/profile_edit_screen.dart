@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../widgets/custom_app_bar.dart';
@@ -35,14 +36,46 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Future<void> _pickAndUploadImage() async {
+    if (kDebugMode) {
+      debugPrint('ProfileEdit: _pickAndUploadImage called, current _selectedImage: $_selectedImage');
+    }
+    
     showModalBottomSheet(
       context: context,
       builder: (BuildContext sheetContext) => ImageSourceBottomSheet(
         onSourceSelected: (source) async {
           try {
+            if (kDebugMode) {
+              debugPrint('ProfileEdit: Picking image from source: $source');
+            }
+            
             final image = await _cloudinaryService.pickImage(source: source);
+            
+            if (kDebugMode) {
+              debugPrint('ProfileEdit: Image picked: ${image?.path ?? "NULL"}');
+            }
+            
             if (image != null) {
-              setState(() => _selectedImage = image);
+              if (kDebugMode) {
+                debugPrint('ProfileEdit: Setting state with new image: ${image.path}');
+              }
+              
+              setState(() {
+                _selectedImage = image;
+              });
+              
+              if (kDebugMode) {
+                debugPrint('ProfileEdit: After setState, _selectedImage: ${_selectedImage?.path}');
+              }
+              
+              // Show success message
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Image selected: ${image.path}'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
             }
           } catch (e) {
             if (!mounted) return;
@@ -123,6 +156,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       
       await firestoreProvider.updateUser(updatedUser);
       
+      // Clear image cache to force refresh of the new image
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        final imageProvider = NetworkImage(imageUrl);
+        await imageProvider.evict();
+        // Also clear the entire image cache
+        imageCache.clear();
+        imageCache.clearLiveImages();
+      }
+      
       if (!mounted) return;
       
       ScaffoldMessenger.of(context).showSnackBar(
@@ -131,7 +173,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context);
+      Navigator.pop(context, true); // Pass true to indicate success
     } catch (e) {
       if (!mounted) return;
       
@@ -146,6 +188,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode) {
+      debugPrint('ProfileEdit: build() called, _selectedImage: ${_selectedImage?.path ?? "NULL"}');
+    }
+    
     if (_isLoading) {
       return Scaffold(
         appBar: const CustomAppBar(title: 'Edit Profile'),
@@ -189,6 +235,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     ],
                   ),
                   child: ProfileImagePicker(
+                    key: ValueKey(_selectedImage?.path ?? _currentUser?.profileImageUrl ?? 'default'),
                     imageUrl: _currentUser?.profileImageUrl,
                     imageFile: _selectedImage,
                     onTap: _pickAndUploadImage,

@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import '../widgets/custom_app_bar.dart';
 import '../providers/firestore_provider.dart';
 import '../providers/auth_provider.dart';
-import '../models/user.dart' as app_user;
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,19 +14,14 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _notificationsEnabled = true;
-  String _cacheKey = DateTime.now().millisecondsSinceEpoch.toString();
-
   void _refreshData() {
     setState(() {
-      _cacheKey = DateTime.now().millisecondsSinceEpoch.toString();
+      // Refresh the widget
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-
     return Scaffold(
       appBar: const CustomAppBar(title: 'Settings'),
       body: ListView(
@@ -64,83 +58,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           const Divider(),
-          // Only show Teacher Identity for teachers
-          FutureBuilder<app_user.User?>(
-            key: ValueKey(_cacheKey),
-            future: currentUser != null
-                ? Provider.of<FirestoreProvider>(context, listen: false).getUser(currentUser.uid)
-                : Future.value(null),
-            builder: (context, snapshot) {
-              final isTeacher = snapshot.hasData && snapshot.data?.role == 'teacher';
-
-              if (isTeacher) {
-                return Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.school),
-                      title: Text(
-                        'Teacher Identity',
-                        style: GoogleFonts.poppins(),
-                      ),
-                      subtitle: Text(
-                        'Customize your teaching profile',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      trailing: const Icon(Icons.arrow_forward_ios),
-                      onTap: () async {
-                        if (!context.mounted) return;
-                        final result = await Navigator.pushNamed(context, '/teacher_identity');
-                        // Refresh dashboard if data was saved
-                        if (result == true && mounted) {
-                          // Dashboard will refresh when we pop back to it
-                        }
-                        if (!mounted) return;
-                        // Refresh after returning
-                        _refreshData();
-                      },
-                    ),
-                    const Divider(),
-                  ],
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.notifications),
-            title: Text(
-              'Notifications',
-              style: GoogleFonts.poppins(),
-            ),
-            subtitle: Text(
-              'Manage notification preferences',
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            trailing: Switch(
-              value: _notificationsEnabled,
-              onChanged: (value) {
-                setState(() {
-                  _notificationsEnabled = value;
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      value ? 'Notifications enabled' : 'Notifications disabled',
-                    ),
-                    duration: const Duration(seconds: 1),
-                  ),
-                );
-              },
-            ),
-          ),
-          const Divider(),
           ListTile(
             leading: const Icon(Icons.help),
             title: Text(
@@ -175,13 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             trailing: const Icon(Icons.arrow_forward_ios),
             onTap: () {
-              // Show about dialog
-              showAboutDialog(
-                context: context,
-                applicationName: 'Attendance Monitoring',
-                applicationVersion: '1.0.0',
-                applicationLegalese: '© 2024 Senior High School',
-              );
+              _showCustomAboutDialog(context);
             },
           ),
           const Divider(),
@@ -340,6 +251,287 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               }
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCustomAboutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 700),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with gradient background
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context).colorScheme.primaryContainer,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.qr_code_scanner,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'EduScan',
+                        style: GoogleFonts.poppins(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Version 1.0.0',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Content - Scrollable
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'About',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'A modern attendance tracking system using QR codes for quick and accurate attendance management.',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Key Features',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildFeatureItem(
+                          context,
+                          Icons.qr_code_2,
+                          'QR Code Scanning',
+                          'Quick attendance marking with QR codes',
+                        ),
+                        _buildFeatureItem(
+                          context,
+                          Icons.analytics,
+                          'Real-time Analytics',
+                          'Track attendance with detailed reports',
+                        ),
+                        _buildFeatureItem(
+                          context,
+                          Icons.groups,
+                          'Section Management',
+                          'Organize students by sections',
+                        ),
+                        _buildFeatureItem(
+                          context,
+                          Icons.notifications_active,
+                          'Instant Updates',
+                          'Get notified about attendance changes',
+                        ),
+                        const SizedBox(height: 20),
+                        // Support section
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.support_agent,
+                                color: Theme.of(context).colorScheme.primary,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Need Help?',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    Text(
+                                      'support@school.edu',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Copyright
+                        Center(
+                          child: Text(
+                            '© 2025 Senior High School\nAll rights reserved.',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Close button
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Close',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFeatureItem(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String description,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              size: 20,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

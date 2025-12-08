@@ -312,6 +312,21 @@ class _ScanAttendanceScreenState extends State<ScanAttendanceScreen> {
   }
 
   Future<void> _processScannedStudentId(String studentId) async {
+    // Reject structured QR codes (e.g., class enrollment QRs meant for students)
+    if (studentId.contains('SECTION:') || 
+        studentId.contains('DATE:') || 
+        studentId.contains('CLASS:') ||
+        studentId.contains('JOINCODE:')) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Wrong QR code type. Please scan a student ID QR code.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     // Prevent duplicate scans in this session
     if (_scannedToday.contains(studentId)) {
       if (!mounted) return;
@@ -396,6 +411,7 @@ class _ScanAttendanceScreenState extends State<ScanAttendanceScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    } finally {
       _processingStudents.remove(studentId);
     }
   }

@@ -79,10 +79,6 @@ class _JoinSectionScreenState extends State<JoinSectionScreen> {
     }
   }
 
-  void _scanQrCode() {
-    Navigator.pushNamed(context, '/scan_teacher_qr');
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -110,7 +106,7 @@ class _JoinSectionScreenState extends State<JoinSectionScreen> {
               const SizedBox(height: 8),
 
               Text(
-                'Enter the join code provided by your teacher or scan the QR code.',
+                'Enter the join code provided by your teacher.',
                 style: GoogleFonts.poppins(
                   fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -212,7 +208,7 @@ class _JoinSectionScreenState extends State<JoinSectionScreen> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
-                              'OR',
+                              ' ',
                               style: GoogleFonts.poppins(
                                 fontSize: 12,
                                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -226,34 +222,6 @@ class _JoinSectionScreenState extends State<JoinSectionScreen> {
                             ),
                           ),
                         ],
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Scan QR Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: OutlinedButton.icon(
-                          onPressed: _scanQrCode,
-                          icon: const Icon(Icons.qr_code_scanner),
-                          label: Text(
-                            'Scan Join QR Code',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                        ),
                       ),
                     ],
                   ),
@@ -293,7 +261,7 @@ class _JoinSectionScreenState extends State<JoinSectionScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Ask your teacher for the class join code. You can find it in their class section details or on the QR code they display.',
+                        'Ask your teacher for the class join code. You can find it in their class section details.',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,

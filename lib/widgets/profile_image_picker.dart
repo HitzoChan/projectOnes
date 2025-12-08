@@ -147,91 +147,32 @@ class ProfileImagePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Stack(
-        children: [
-          // Profile image circle
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Theme.of(context).colorScheme.primaryContainer,
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: ClipOval(child: _buildImage(context)),
-          ),
-
-          // Edit button
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.surface,
-                  width: 3,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+    return Stack(
+      children: [
+        // Profile image circle
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Theme.of(context).colorScheme.primaryContainer,
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                blurRadius: 20,
+                spreadRadius: 2,
+                offset: const Offset(0, 8),
               ),
-              child: const Icon(
-                Icons.camera_alt,
-                size: 20,
-                color: Colors.white,
-              ),
-            ),
+            ],
           ),
-        ],
-      ),
+          child: ClipOval(child: _buildImage(context)),
+        ),
+      ],
     );
   }
 
   Widget _buildImage(BuildContext context) {
-    // Show local file if selected
-    if (imageFile != null) {
-      return Image.file(imageFile!, fit: BoxFit.cover);
-    }
-
-    // Show network image if URL exists
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return Image.network(
-        imageUrl!,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Center(
-            child: CircularProgressIndicator(
-              value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                  : null,
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return _buildPlaceholder(context);
-        },
-      );
-    }
-
-    // Show placeholder
+    // Always show placeholder with first letter
     return _buildPlaceholder(context);
   }
 

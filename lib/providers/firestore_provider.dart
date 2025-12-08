@@ -395,6 +395,47 @@ class FirestoreProvider with ChangeNotifier {
     return true;
   }
 
+  /// Mark all students in a section as Absent for a given day if they have no attendance yet.
+  /// Does NOT overwrite existing Present/Late records. Returns how many Absent records were created.
+  Future<int> markAbsenteesForSection(String sectionId, {DateTime? day}) async {
+    day ??= DateTime.now();
+    final dayStart = DateTime(day.year, day.month, day.day);
+
+    final section = await getSectionById(sectionId);
+    final teacherId = section?.teacherId;
+    final students = await getStudentsForSection(sectionId);
+
+    int created = 0;
+
+    for (final student in students) {
+      final dayKey = '${dayStart.year.toString().padLeft(4, '0')}${dayStart.month.toString().padLeft(2, '0')}${dayStart.day.toString().padLeft(2, '0')}';
+      final docId = '${sectionId}_${student.id}_$dayKey';
+      final docRef = _firestore.collection('attendance').doc(docId);
+      final existing = await docRef.get();
+
+      if (existing.exists) {
+        final data = existing.data();
+        final isPresent = data?['isPresent'] == true;
+        if (isPresent) continue; // don't overwrite present
+        // already absent/late -> leave as is
+        continue;
+      }
+
+      await docRef.set({
+        'studentId': student.id,
+        'sectionId': sectionId,
+        'date': dayStart,
+        'isPresent': false,
+        'status': 'Absent',
+        'timestamp': FieldValue.serverTimestamp(),
+        'teacherId': teacherId,
+      });
+      created++;
+    }
+
+    return created;
+  }
+
   Future<app_user.User?> getUserByStudentId(String studentId) async {
     final snapshot = await _firestore
         .collection('users')
@@ -458,7 +499,7 @@ class FirestoreProvider with ChangeNotifier {
 
   /// Returns daily aggregated attendance counts for a teacher's sections for the past [days] days.
   /// Each map contains: 'date' (ISO yyyy-MM-dd), 'present', 'absent', 'late'.
-  Future<List<Map<String, dynamic>>> getDailyAttendanceCountsForTeacher(String teacherUid, {int days = 7}) async {
+  Future<List<Map<String, dynamic>>> getDailyAttendanceCountsForTeacher(String teacherUid, {int days = 7, String? sectionId}) async {
     // Prefer querying by teacherId on attendance docs. This is more efficient than whereIn(sectionId).
     // If attendance docs were created before teacherId was added, consider running `backfillAttendanceTeacherIds`.
     final now = DateTime.now();
@@ -472,20 +513,11 @@ class FirestoreProvider with ChangeNotifier {
       int present = 0;
       int absent = 0;
       int late = 0;
+      bool usedTeacherQuery = false;
 
-      try {
-        final snapshot = await _firestore
-            .collection('attendance')
-            .where('teacherId', isEqualTo: teacherUid)
-            .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
-            .where('date', isLessThan: Timestamp.fromDate(dayEnd))
-            .get();
-
-        for (final doc in snapshot.docs) {
-          final data = doc.data() as Map<String, dynamic>?;
-          final statusRaw = data?['status'];
-          final isPresentRaw = data?['isPresent'];
-          final status = statusRaw?.toString() ?? (isPresentRaw == true ? 'Present' : 'Absent');
+      if (sectionId != null) {
+        // Direct section filter
+        await _aggregateBySections(dayStart, dayEnd, teacherUid, (status) {
           if (status == 'Present') {
             present++;
           } else if (status == 'Late') {
@@ -493,51 +525,55 @@ class FirestoreProvider with ChangeNotifier {
           } else {
             absent++;
           }
-        }
-      } on FirebaseException catch (e) {
-        // If the query fails (e.g. due to index issues), fallback to section-based chunked queries.
-        debugPrint('teacher-based attendance query failed: ${e.code} ${e.message}');
-        // Fallback: fetch sections and use previous chunking logic
-        final sections = await getSectionsByTeacher(teacherUid);
-        final sectionIds = sections.map((s) => s.id).toList();
+        }, sectionIdsOverride: [sectionId]);
+      } else {
+        try {
+          final snapshot = await _firestore
+              .collection('attendance')
+              .where('teacherId', isEqualTo: teacherUid)
+              .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+              .where('date', isLessThan: Timestamp.fromDate(dayEnd))
+              .get();
 
-        if (sectionIds.isNotEmpty) {
-          // Helper to chunk list into groups of 10 (Firestore whereIn limit)
-          List<List<String>> chunked(List<String> list, int size) {
-            final out = <List<String>>[];
-            for (var i = 0; i < list.length; i += size) {
-              out.add(list.sublist(i, i + size > list.length ? list.length : i + size));
-            }
-            return out;
-          }
-
-          final chunks = chunked(sectionIds, 10);
-          for (final chunk in chunks) {
-            Query query = _firestore.collection('attendance')
-                .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
-                .where('date', isLessThan: Timestamp.fromDate(dayEnd));
-
-            if (chunk.length == 1) {
-              query = query.where('sectionId', isEqualTo: chunk.first);
+          usedTeacherQuery = true;
+          for (final doc in snapshot.docs) {
+            final data = doc.data() as Map<String, dynamic>?;
+            final statusRaw = data?['status'];
+            final isPresentRaw = data?['isPresent'];
+            final status = statusRaw?.toString() ?? (isPresentRaw == true ? 'Present' : 'Absent');
+            if (status == 'Present') {
+              present++;
+            } else if (status == 'Late') {
+              late++;
             } else {
-              query = query.where('sectionId', whereIn: chunk);
-            }
-
-            final snapshot = await query.get();
-            for (final doc in snapshot.docs) {
-              final data = doc.data() as Map<String, dynamic>?;
-              final statusRaw = data?['status'];
-              final isPresentRaw = data?['isPresent'];
-              final status = statusRaw?.toString() ?? (isPresentRaw == true ? 'Present' : 'Absent');
-              if (status == 'Present') {
-                present++;
-              } else if (status == 'Late') {
-                late++;
-              } else {
-                absent++;
-              }
+              absent++;
             }
           }
+        } on FirebaseException catch (e) {
+          // If the query fails (e.g. due to index issues), fallback to section-based chunked queries.
+          debugPrint('teacher-based attendance query failed: ${e.code} ${e.message}');
+          await _aggregateBySections(dayStart, dayEnd, teacherUid, (status) {
+            if (status == 'Present') {
+              present++;
+            } else if (status == 'Late') {
+              late++;
+            } else {
+              absent++;
+            }
+          });
+        }
+
+        // If teacherId query returned zero and docs might be missing teacherId, do a secondary section-based aggregation.
+        if (usedTeacherQuery && present == 0 && late == 0 && absent == 0) {
+          await _aggregateBySections(dayStart, dayEnd, teacherUid, (status) {
+            if (status == 'Present') {
+              present++;
+            } else if (status == 'Late') {
+              late++;
+            } else {
+              absent++;
+            }
+          });
         }
       }
 
@@ -550,6 +586,95 @@ class FirestoreProvider with ChangeNotifier {
     }
 
     return results;
+  }
+
+  /// Get daily attendance counts for a student (aggregates across sections or for a specific section)
+  Future<List<Map<String, dynamic>>> getDailyAttendanceCountsForStudent(String studentId, {int days = 7, String? sectionId}) async {
+    final now = DateTime.now();
+    final results = <Map<String, dynamic>>[];
+
+    for (var d = days - 1; d >= 0; d--) {
+      final day = DateTime(now.year, now.month, now.day).subtract(Duration(days: d));
+      final dayStart = DateTime(day.year, day.month, day.day);
+      final dayEnd = dayStart.add(const Duration(days: 1));
+
+      int present = 0;
+      int absent = 0;
+
+      // Query attendance for this student on this day
+      Query query = _firestore
+          .collection('attendance')
+          .where('studentId', isEqualTo: studentId)
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+          .where('date', isLessThan: Timestamp.fromDate(dayEnd));
+
+      // Apply section filter if provided
+      if (sectionId != null) {
+        query = query.where('sectionId', isEqualTo: sectionId);
+      }
+
+      final snapshot = await query.get();
+
+      // Count Present and Absent (ignore Late for student view to match teacher behavior)
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        final statusRaw = data?['status'];
+        final isPresentRaw = data?['isPresent'];
+        final status = statusRaw?.toString() ?? (isPresentRaw == true ? 'Present' : 'Absent');
+        
+        if (status == 'Present') {
+          present++;
+        } else {
+          absent++;
+        }
+      }
+
+      results.add({
+        'date': '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
+        'present': present,
+        'absent': absent,
+      });
+    }
+
+    return results;
+  }
+
+  // Helper: aggregate attendance by teacher sections (covers docs missing teacherId)
+  Future<void> _aggregateBySections(DateTime dayStart, DateTime dayEnd, String teacherUid, void Function(String status) tally, {List<String>? sectionIdsOverride}) async {
+    final sectionIds = sectionIdsOverride ?? (await getSectionsByTeacher(teacherUid)).map((s) => s.id).toList();
+
+    if (sectionIds.isEmpty) return;
+
+    // Helper to chunk list into groups of 10 (Firestore whereIn limit)
+    List<List<String>> chunked(List<String> list, int size) {
+      final out = <List<String>>[];
+      for (var i = 0; i < list.length; i += size) {
+        out.add(list.sublist(i, i + size > list.length ? list.length : i + size));
+      }
+      return out;
+    }
+
+    final chunks = chunked(sectionIds, 10);
+    for (final chunk in chunks) {
+      Query query = _firestore.collection('attendance')
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+          .where('date', isLessThan: Timestamp.fromDate(dayEnd));
+
+      if (chunk.length == 1) {
+        query = query.where('sectionId', isEqualTo: chunk.first);
+      } else {
+        query = query.where('sectionId', whereIn: chunk);
+      }
+
+      final snapshot = await query.get();
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        final statusRaw = data?['status'];
+        final isPresentRaw = data?['isPresent'];
+        final status = statusRaw?.toString() ?? (isPresentRaw == true ? 'Present' : 'Absent');
+        tally(status);
+      }
+    }
   }
 
   /// Backfill `teacherId` on attendance documents that are missing it.
@@ -780,3 +905,4 @@ class FirestoreProvider with ChangeNotifier {
     }).toList();
   }
 }
+

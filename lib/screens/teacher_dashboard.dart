@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter/foundation.dart';
-import 'admin/backfill_attendance_screen.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/profile_avatar.dart';
 import '../providers/auth_provider.dart';
@@ -99,22 +97,38 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     for (var section in sections) {
       final attendanceRecords = await firestoreProvider.getAttendanceForSection(section.id);
       
-      // Filter for today's records
+      // Filter for today's records only
       final todayRecords = attendanceRecords.where((record) {
-        return record.date.isAfter(todayStart) && record.date.isBefore(todayEnd);
+        return record.date.isAfter(todayStart.subtract(const Duration(seconds: 1))) && record.date.isBefore(todayEnd);
       }).toList();
       
-      if (todayRecords.isNotEmpty) {
-        int present = todayRecords.where((r) => r.attendanceStatus == 'Present').length;
-        int late = todayRecords.where((r) => r.attendanceStatus == 'Late').length;
-        int absent = todayRecords.where((r) => r.attendanceStatus == 'Absent').length;
+      // Remove duplicates: keep only the most recent record per student per day
+      final Map<String, dynamic> latestByStudent = {};
+      for (final record in todayRecords) {
+        if (!latestByStudent.containsKey(record.studentId)) {
+          latestByStudent[record.studentId] = record;
+        } else {
+          final existing = latestByStudent[record.studentId];
+          // Keep the most recent timestamp
+          if (record.timestamp != null && existing.timestamp != null) {
+            if (record.timestamp!.isAfter(existing.timestamp!)) {
+              latestByStudent[record.studentId] = record;
+            }
+          }
+        }
+      }
+      
+      final cleanedRecords = latestByStudent.values.toList();
+      
+      if (cleanedRecords.isNotEmpty) {
+        int present = cleanedRecords.where((r) => r.attendanceStatus == 'Present').length;
+        int absent = cleanedRecords.where((r) => r.attendanceStatus == 'Absent').length;
         
         attendanceData.add({
           'sectionName': section.name,
           'schedule': section.schedule,
           'totalStudents': section.studentCount,
           'present': present,
-          'late': late,
           'absent': absent,
         });
       }
@@ -160,16 +174,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     final userName = _userData?['name'] ?? 'Teacher';
 
     return Scaffold(
-      appBar: CustomAppBar(
+      appBar: const CustomAppBar(
         title: 'Teacher Dashboard',
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {
-              // Handle notifications
-            },
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -223,56 +229,14 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                         Text(
                           userName,
                           style: GoogleFonts.poppins(
-                            fontSize: 24,
+                            fontSize: MediaQuery.of(context).size.width < 400 ? 18 : 24,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                             letterSpacing: 0.5,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                (_userData?['subject'] != null && _userData!['subject'].toString().isNotEmpty)
-                                  ? Icons.book
-                                  : Icons.info_outline,
-                                size: 14,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                (_userData?['subject'] != null && _userData!['subject'].toString().isNotEmpty)
-                                  ? _userData!['subject']
-                                  : 'Set up your profile',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (_userData?['department'] != null && _userData!['department'].toString().isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              _userData!['department'],
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: Colors.white.withValues(alpha: 0.85),
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -350,8 +314,10 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                   ),
                   const SizedBox(height: 12),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Expanded(
+                      SizedBox(
+                        width: 160,
                         child: _buildActionCard(
                           context,
                           'Reports',
@@ -360,26 +326,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                           Colors.purple,
                           () => Navigator.pushNamed(context, '/attendance_report'),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Debug-only admin card for backfill
-                      if (kDebugMode)
-                        Expanded(
-                          child: _buildActionCard(
-                            context,
-                            'Admin: Backfill',
-                            'Backfill attendance teacherId',
-                            Icons.backup,
-                            Colors.grey,
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const BackfillAttendanceScreen()),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(), // Empty container for spacing
                       ),
                     ],
                   ),
@@ -470,17 +416,20 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              data['sectionName'],
+                                              'Section: ${data['sectionName']}',
                                               style: GoogleFonts.poppins(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.w600,
+                                                color: Colors.grey.shade900,
                                               ),
                                             ),
+                                            const SizedBox(height: 6),
                                             Text(
-                                              data['schedule'],
+                                              'Schedule: ${data['schedule']}',
                                               style: GoogleFonts.poppins(
                                                 fontSize: 14,
-                                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey.shade600,
                                               ),
                                             ),
                                           ],
@@ -509,7 +458,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                                     children: [
                                       _buildAttendanceStat('Present', '${data['present']}', Colors.green),
                                       _buildAttendanceStat('Absent', '${data['absent']}', Colors.red),
-                                      _buildAttendanceStat('Late', '${data['late']}', Colors.orange),
                                     ],
                                   ),
                                 ],
@@ -531,16 +479,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       bottomNavigationBar: TeacherBottomNav(
         currentIndex: _selectedIndex,
         onTap: _onNavTap,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.pushNamed(context, '/scan_attendance'),
-        icon: const Icon(Icons.camera_alt),
-        label: Text(
-          'Scan',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
     );
   }

@@ -118,9 +118,9 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.school,
-                    size: 60,
+                  child: Icon(
+                    Icons.qr_code_scanner_rounded,
+                    size: 64,
                     color: Colors.white,
                   ),
                 ),

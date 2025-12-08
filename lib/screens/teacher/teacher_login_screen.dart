@@ -85,18 +85,33 @@ class _TeacherLoginScreenState extends State<TeacherLoginScreen> {
             children: [
               const SizedBox(height: 40),
 
-              // School Icon
+              // Logo
               Container(
                 width: 120,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
+                  gradient: LinearGradient(
+                    colors: [
+                      Theme.of(context).colorScheme.primary,
+                      Theme.of(context).colorScheme.primaryContainer,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
                 child: Icon(
-                  Icons.school,
-                  size: 60,
-                  color: Theme.of(context).colorScheme.primary,
+                  Icons.qr_code_scanner_rounded,
+                  size: 64,
+                  color: Colors.white,
                 ),
               ),
 

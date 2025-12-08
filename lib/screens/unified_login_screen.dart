@@ -115,7 +115,7 @@ class _UnifiedLoginScreenState extends State<UnifiedLoginScreen> {
                     gradient: LinearGradient(
                       colors: [
                         Theme.of(context).colorScheme.primary,
-                        Theme.of(context).colorScheme.secondary,
+                        Theme.of(context).colorScheme.primaryContainer,
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -123,18 +123,23 @@ class _UnifiedLoginScreenState extends State<UnifiedLoginScreen> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3), // FIXED
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                        blurRadius: 24,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.school, size: 60, color: Colors.white),
+                  child: Icon(
+                    Icons.qr_code_scanner_rounded,
+                    size: 64,
+                    color: Colors.white,
+                  ),
                 ),
 
                 const SizedBox(height: 40),
                 Text(
-                  'Attendance Monitoring',
+                  'EduScan',
                   style: GoogleFonts.poppins(
                     fontSize: 28,
                     fontWeight: FontWeight.w600,

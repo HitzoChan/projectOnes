@@ -159,7 +159,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
                 // Welcome Text
                 Text(
-                  'Join Attendance Monitoring',
+                  'Join EduScan',
                   style: GoogleFonts.poppins(
                     fontSize: 28,
                     fontWeight: FontWeight.w600,

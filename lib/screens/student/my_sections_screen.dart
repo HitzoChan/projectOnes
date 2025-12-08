@@ -18,12 +18,37 @@ class MySectionsScreen extends StatefulWidget {
 class _MySectionsScreenState extends State<MySectionsScreen> {
   int _selectedIndex = 2; // Sections tab
   List<Section> _sections = [];
+  List<Section> _filteredSections = [];
   bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadSections();
+    _searchController.addListener(_filterSections);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _filterSections() {
+    final query = _searchController.text.toLowerCase();
+    if (query.isEmpty) {
+      setState(() {
+        _filteredSections = _sections;
+      });
+    } else {
+      setState(() {
+        _filteredSections = _sections.where((section) {
+          return section.name.toLowerCase().contains(query) ||
+              section.teacherName.toLowerCase().contains(query);
+        }).toList();
+      });
+    }
   }
 
   Future<void> _loadSections() async {
@@ -36,6 +61,7 @@ class _MySectionsScreenState extends State<MySectionsScreen> {
         if (!mounted) return;
         setState(() {
           _sections = sections;
+          _filteredSections = sections;
           _isLoading = false;
         });
       } catch (e) {
@@ -79,9 +105,18 @@ class _MySectionsScreenState extends State<MySectionsScreen> {
           Padding(
             padding: const EdgeInsets.all(20),
             child: TextField(
+              controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Search sections...',
                 prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                        },
+                      )
+                    : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -96,7 +131,7 @@ class _MySectionsScreenState extends State<MySectionsScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _sections.isEmpty
+                : _filteredSections.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -108,7 +143,7 @@ class _MySectionsScreenState extends State<MySectionsScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'No sections yet',
+                              _searchController.text.isNotEmpty ? 'No sections found' : 'No sections yet',
                               style: GoogleFonts.poppins(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
@@ -117,7 +152,9 @@ class _MySectionsScreenState extends State<MySectionsScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Join a class section to get started',
+                              _searchController.text.isNotEmpty 
+                                  ? 'Try a different search term'
+                                  : 'Join a class section to get started',
                               style: GoogleFonts.poppins(
                                 fontSize: 14,
                                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -128,9 +165,9 @@ class _MySectionsScreenState extends State<MySectionsScreen> {
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: _sections.length,
+                        itemCount: _filteredSections.length,
                         itemBuilder: (context, index) {
-                          final section = _sections[index];
+                          final section = _filteredSections[index];
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 16),

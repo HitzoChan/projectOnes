@@ -114,14 +114,6 @@ class _GenerateQrScreenState extends State<GenerateQrScreen> {
     });
   }
 
-  void _shareQr() {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('QR code shared!')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -285,29 +277,6 @@ class _GenerateQrScreenState extends State<GenerateQrScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
-
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _shareQr,
-                      icon: const Icon(Icons.share),
-                      label: Text(
-                        'Share QR',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            Theme.of(context).colorScheme.primary,
-                        foregroundColor:
-                            Theme.of(context).colorScheme.onPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
 

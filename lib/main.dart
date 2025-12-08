@@ -13,6 +13,7 @@ import 'screens/teacher_dashboard.dart';
 import 'screens/student/student_dashboard.dart' as student_dash;
 import 'screens/student/my_qr_screen.dart' as student_qr;
 import 'screens/student/scan_teacher_qr_screen.dart';
+import 'screens/student/scan_class_qr_screen.dart';
 import 'screens/student/my_sections_screen.dart' as student_sections;
 import 'screens/student/join_section_screen.dart' as student_join;
 import 'screens/attendance_report_screen.dart';
@@ -112,7 +113,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FirestoreProvider()),
       ],
       child: MaterialApp(
-        title: 'Attendance Monitoring System',
+        title: 'EduScan',
         home: const AuthWrapper(),
         theme: ThemeData(
           useMaterial3: true,
@@ -148,6 +149,7 @@ class MyApp extends StatelessWidget {
           '/teacher_dashboard': (context) => const TeacherDashboard(),
           '/my_qr': (context) => const student_qr.MyQrScreen(),
           '/scan_teacher_qr': (context) => const ScanTeacherQrScreen(),
+          '/scan_class_qr': (context) => const ScanClassQrScreen(),
           '/my_sections': (context) => const student_sections.MySectionsScreen(),
           '/join_section': (context) => const student_join.JoinSectionScreen(),
           '/attendance_report': (context) => const AttendanceReportScreen(),

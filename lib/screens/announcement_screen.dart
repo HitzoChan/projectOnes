@@ -26,6 +26,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   void initState() {
     super.initState();
     _loadTeacherSections();
+    _cleanupOldAnnouncements();
   }
 
   Future<void> _loadTeacherSections() async {
@@ -47,6 +48,32 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
       _sections = sections;
       _selectedSections = {for (var s in sections) s.id: false};
     });
+  }
+
+  Future<void> _cleanupOldAnnouncements() async {
+    try {
+      final firestoreProvider =
+          Provider.of<FirestoreProvider>(context, listen: false);
+
+      // Get all announcements
+      final announcements = await firestoreProvider.getAnnouncements();
+
+      // Current time minus 48 hours
+      final now = DateTime.now();
+      final fortyEightHoursAgo = now.subtract(const Duration(hours: 48));
+
+      // Delete announcements older than 48 hours
+      for (final announcement in announcements) {
+        final createdAt = announcement['createdAt'] as DateTime;
+
+        if (createdAt.isBefore(fortyEightHoursAgo)) {
+          await firestoreProvider.deleteAnnouncement(announcement['id']);
+        }
+      }
+    } catch (e) {
+      // Silently fail - don't disrupt app startup
+      debugPrint('Error cleaning up old announcements: $e');
+    }
   }
 
   @override

@@ -52,14 +52,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppBar(
+      appBar: const CustomAppBar(
         title: 'Dashboard',
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () => Navigator.pushNamed(context, '/student_announcements'),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -154,12 +148,12 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                 Text(
                                   user.name,
                                   style: GoogleFonts.poppins(
-                                    fontSize: 24,
+                                    fontSize: MediaQuery.of(context).size.width < 400 ? 18 : 24,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                     letterSpacing: 0.5,
                                   ),
-                                  maxLines: 1,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 6),
@@ -192,28 +186,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                     ),
                                   ],
                                 ),
-                                if (user.section != null && user.section!.isNotEmpty)
-                                  const SizedBox(height: 4),
-                                if (user.section != null && user.section!.isNotEmpty)
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          '${user.grade ?? 'Grade 12'} - ${user.section}',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 12,
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                               ],
                             ),
                           ),
@@ -230,171 +202,182 @@ class _StudentDashboardState extends State<StudentDashboard> {
             // Today's Attendance Summary
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: FutureBuilder<List<Attendance>>(
-                future: Provider.of<FirestoreProvider>(context, listen: false)
-                    .getAttendanceForStudent(Provider.of<AuthProvider>(context, listen: false).currentUser!.uid),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Card(
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    );
-                  }
+              child: Consumer2<AuthProvider, FirestoreProvider>(
+                builder: (context, authProvider, firestoreProvider, child) {
+                  return FutureBuilder<Map<String, dynamic>>(
+                    future: _getTodayAttendanceWithSections(authProvider, firestoreProvider),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Card(
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                        );
+                      }
 
-                  final today = DateTime.now();
-                  final todayAttendance = snapshot.data?.where((attendance) =>
-                      attendance.date.year == today.year &&
-                      attendance.date.month == today.month &&
-                      attendance.date.day == today.day).toList();
+                      final todayAttendance = snapshot.data?['attendance'] as List<Attendance>? ?? [];
+                      final sectionNames = snapshot.data?['sectionNames'] as Map<String, String>? ?? {};
 
-                  if (todayAttendance == null || todayAttendance.isEmpty) {
-                    return Card(
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      if (todayAttendance.isEmpty) {
+                        return Card(
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  "Today's Status",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    color: Theme.of(context).colorScheme.onSurface,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.schedule,
-                                        size: 16,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Not marked',
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No attendance recorded yet',
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
-                  final latestAttendance = todayAttendance.first;
-                  final isPresent = latestAttendance.attendanceStatus == 'Present';
-                  final isLate = latestAttendance.attendanceStatus == 'Late';
-
-                  return Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                "Today's Status",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: isPresent
-                                      ? Colors.green.shade100
-                                      : isLate
-                                          ? Colors.orange.shade100
-                                          : Colors.red.shade100,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Row(
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Icon(
-                                      isPresent
-                                          ? Icons.check_circle
-                                          : isLate
-                                              ? Icons.access_time
-                                              : Icons.cancel,
-                                      size: 16,
-                                      color: isPresent
-                                          ? Colors.green.shade800
-                                          : isLate
-                                              ? Colors.orange.shade800
-                                              : Colors.red.shade800,
-                                    ),
-                                    const SizedBox(width: 4),
                                     Text(
-                                      latestAttendance.attendanceStatus,
+                                      "Today's Status",
                                       style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: isPresent
-                                            ? Colors.green.shade800
-                                            : isLate
-                                                ? Colors.orange.shade800
-                                                : Colors.red.shade800,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.schedule,
+                                            size: 16,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Not marked',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Scanned at ${latestAttendance.displayTime}',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No attendance recorded yet',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
+                        );
+                      }
+
+                      return Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 16 : 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Today's Attendance",
+                                style: GoogleFonts.poppins(
+                                  fontSize: MediaQuery.of(context).size.width < 600 ? 16 : 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Show attendance for each section
+                              ...todayAttendance.map((attendance) {
+                                final isPresent = attendance.attendanceStatus == 'Present';
+                                final statusColor = isPresent ? Colors.green : Colors.red;
+                                final sectionName = sectionNames[attendance.sectionId] ?? 'Unknown Section';
+                                
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Container(
+                                    padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 10 : 12),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withValues(alpha: 0.1),
+                                      border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                sectionName,
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: MediaQuery.of(context).size.width < 600 ? 12 : 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.grey.shade900,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Time: ${attendance.displayTime}',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: MediaQuery.of(context).size.width < 600 ? 11 : 12,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: MediaQuery.of(context).size.width < 600 ? 8 : 10,
+                                            vertical: MediaQuery.of(context).size.width < 600 ? 4 : 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            attendance.attendanceStatus,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: MediaQuery.of(context).size.width < 600 ? 11 : 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: statusColor,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -422,11 +405,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       Expanded(
                         child: _buildActionCard(
                           context,
-                          'Scan QR Attendance',
-                          'Scan Teacher QR',
+                          'Mark Attendance',
+                          'Scan class QR code',
                           Icons.qr_code_scanner,
                           Colors.blue,
-                          () => Navigator.pushNamed(context, '/scan_attendance'),
+                          () => Navigator.pushNamed(context, '/scan_class_qr'),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -568,43 +551,92 @@ class _StudentDashboardState extends State<StudentDashboard> {
                               timeAgo = 'Just now';
                             }
 
-                            return Container(
-                              width: 200,
-                              margin: const EdgeInsets.only(right: 12),
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => Navigator.pushNamed(context, '/student_announcements'),
                                 borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.1),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    announcement['title'] as String,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Theme.of(context).colorScheme.onSurface,
+                                child: Container(
+                                  width: 200,
+                                  margin: const EdgeInsets.only(right: 12),
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                                      width: 1,
                                     ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.08),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
                                   ),
-                                  const Spacer(),
-                                  Text(
-                                    timeAgo,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            // Icon indicator
+                                            Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: Theme.of(context).colorScheme.primaryContainer,
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Icon(
+                                                Icons.announcement_rounded,
+                                                size: 16,
+                                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            // Title
+                                            Text(
+                                              announcement['title'] as String,
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: Theme.of(context).colorScheme.onSurface,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // Content preview
+                                            Expanded(
+                                              child: Text(
+                                                announcement['content'] as String,
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 10,
+                                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                                  height: 1.2,
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Time indicator
+                                      Text(
+                                        timeAgo,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w500,
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
+                                ),
                               ),
                             );
                           },
@@ -675,5 +707,33 @@ class _StudentDashboardState extends State<StudentDashboard> {
         ),
       ),
     );
+  }
+
+  Future<Map<String, dynamic>> _getTodayAttendanceWithSections(
+    AuthProvider authProvider,
+    FirestoreProvider firestoreProvider,
+  ) async {
+    // Get all attendance for student
+    final attendance = await firestoreProvider.getAttendanceForStudent(authProvider.currentUser!.uid);
+    
+    // Get all sections for student
+    final sections = await firestoreProvider.getSectionsForStudent(authProvider.currentUser!.uid);
+    
+    // Create section name map
+    final sectionNames = {for (var section in sections) section.id: section.name};
+    
+    // Filter for today's records
+    final today = DateTime.now();
+    final todayAttendance = attendance
+        .where((record) =>
+            record.date.year == today.year &&
+            record.date.month == today.month &&
+            record.date.day == today.day)
+        .toList();
+    
+    return {
+      'attendance': todayAttendance,
+      'sectionNames': sectionNames,
+    };
   }
 }

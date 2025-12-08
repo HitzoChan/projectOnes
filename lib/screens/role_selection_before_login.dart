@@ -25,16 +25,38 @@ class RoleSelectionBeforeLoginScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // App Logo/Icon
-                Icon(
-                  Icons.school,
-                  size: 80,
-                  color: Theme.of(context).colorScheme.primary,
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context).colorScheme.primaryContainer,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.qr_code_scanner_rounded,
+                    size: 64,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 24),
 
                 // App Title
                 Text(
-                  'Attendance Monitoring',
+                  'EduScan',
                   style: GoogleFonts.poppins(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,

@@ -273,7 +273,7 @@ class _ScanTeacherQrScreenState extends State<ScanTeacherQrScreen> {
               child: Column(
                 children: [
                   Text(
-                    'Scan Teacher\'s Class QR Code',
+                    'Scan to Join Class',
                     style: GoogleFonts.poppins(
                       fontSize: 18,
                       fontWeight: FontWeight.w500,
@@ -283,7 +283,7 @@ class _ScanTeacherQrScreenState extends State<ScanTeacherQrScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Position the QR code within the frame to join the class',
+                    'Scan teacher\'s QR code to enroll in the class',
                     style: GoogleFonts.poppins(
                       fontSize: 14,
                       color: Colors.white70,

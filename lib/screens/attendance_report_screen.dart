@@ -64,8 +64,18 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
           // Sort most recent first
           combined.sort((a, b) => b.date.compareTo(a.date));
 
-          // Also load daily aggregated counts for the past `_daysWindow` days
-          final daily = await firestoreProvider.getDailyAttendanceCountsForTeacher(teacherId, days: _daysWindow);
+          // Also load daily aggregated counts for the past `_daysWindow` days (respect selected section filter)
+          final daily = await firestoreProvider.getDailyAttendanceCountsForTeacher(
+            teacherId,
+            days: _daysWindow,
+            sectionId: _selectedSectionId,
+          );
+
+          // Debug: Check if we got data
+          debugPrint('Teacher daily counts: ${daily.length} days');
+          for (var day in daily) {
+            debugPrint('  ${day['date']}: Present=${day['present']}, Late=${day['late']}, Absent=${day['absent']}');
+          }
 
           setState(() {
             _attendanceRecords = combined;
@@ -74,8 +84,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
           });
         } else {
           // Student (default): load student's own attendance
-          final attendance = await firestoreProvider.getAttendanceForStudent(authProvider.currentUser!.uid);
-          final sections = await firestoreProvider.getSectionsForStudent(authProvider.currentUser!.uid);
+          final studentId = authProvider.currentUser!.uid;
+          final attendance = await firestoreProvider.getAttendanceForStudent(studentId);
+          final sections = await firestoreProvider.getSectionsForStudent(studentId);
 
           // Create section name map and student sections list
           _sectionNames = {for (var section in sections) section.id: section.name};
@@ -86,8 +97,16 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             _selectedSectionId = null; // keep null to represent "All Sections" by default
           }
 
+          // Load daily aggregated counts for student (past _daysWindow days, respect selected section filter)
+          final daily = await firestoreProvider.getDailyAttendanceCountsForStudent(
+            studentId,
+            days: _daysWindow,
+            sectionId: _selectedSectionId,
+          );
+
           setState(() {
             _attendanceRecords = attendance;
+            _dailyCounts = daily;
             _isLoading = false;
           });
         }
@@ -114,20 +133,18 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
       );
     }
 
-    final bool isTeacher = _dailyCounts.isNotEmpty;
-
     return Scaffold(
       appBar: const CustomAppBar(title: 'Attendance Report'),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 16 : 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Overall Statistics',
                 style: GoogleFonts.poppins(
-                  fontSize: 20,
+                  fontSize: MediaQuery.of(context).size.width < 600 ? 18 : 20,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -137,8 +154,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Container(
-                        height: 360,
-                        padding: const EdgeInsets.all(12),
+                        height: MediaQuery.of(context).size.width < 600 ? 300 : 360,
+                        padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 8 : 12),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(16),
@@ -149,8 +166,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Student section selector (ChoiceChips) - lightweight segmented control feel
-                            if (!isTeacher && _studentSections.isNotEmpty)
+                            // Section selector (ChoiceChips) for students
+                            if (_studentSections.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 6.0),
                                 child: SingleChildScrollView(
@@ -165,7 +182,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                           onSelected: (sel) {
                                             setState(() {
                                               _selectedSectionId = null;
+                                              _isLoading = true;
                                             });
+                                            _loadAttendanceReport();
                                           },
                                           selectedColor: Colors.blue.shade600,
                                           backgroundColor: Colors.grey.shade200,
@@ -180,7 +199,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                               onSelected: (sel) {
                                                 setState(() {
                                                   _selectedSectionId = sel ? s.id : null;
+                                                  _isLoading = true;
                                                 });
+                                                _loadAttendanceReport();
                                               },
                                               selectedColor: Colors.blue.shade600,
                                               backgroundColor: Colors.grey.shade200,
@@ -192,8 +213,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                                 ),
                               ),
 
-                            // Chart area
-                            Expanded(child: isTeacher ? _buildTrendChart(large: true) : _buildAttendanceChart(large: true)),
+                            // Chart area - always use bar chart
+                            Expanded(child: _buildBarChart(large: true)),
                           ],
                         ),
                       ),
@@ -203,10 +224,19 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
               // Section selector for teachers
               if (_teacherSections.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: MediaQuery.of(context).size.width < 600 ? 0 : 4.0,
+                    vertical: 8.0,
+                  ),
                   child: Row(
                     children: [
-                      Text('Section:', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                      Text(
+                        'Section:',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: MediaQuery.of(context).size.width < 600 ? 14 : 16,
+                        ),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButton<String?>(
@@ -231,74 +261,173 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                 ),
 
               const SizedBox(height: 16),
-              Text(
-                'Recent Attendance',
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Text(
+                  'Recent Attendance',
+                  style: GoogleFonts.poppins(
+                    fontSize: MediaQuery.of(context).size.width < 600 ? 16 : 20,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
-              // Filter recent attendance by selected section for students
-              (_selectedSectionId == null ? _attendanceRecords : _attendanceRecords.where((r) => r.sectionId == _selectedSectionId).toList()).isEmpty
-                  ? Center(
-                      child: Text(
-                        'No attendance records found',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: (_selectedSectionId == null ? _attendanceRecords : _attendanceRecords.where((r) => r.sectionId == _selectedSectionId).toList()).length,
-                      itemBuilder: (context, index) {
-                        final displayRecords = _selectedSectionId == null ? _attendanceRecords : _attendanceRecords.where((r) => r.sectionId == _selectedSectionId).toList();
-                        final record = displayRecords[index];
-                        final sectionName = _sectionNames[record.sectionId] ?? 'Unknown Section';
-
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 2,
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            onTap: () {},
-                            title: Text(
-                              '${DateFormat.yMMMd().format(record.date)} • $sectionName',
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(
-                              record.displayTime,
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(record.attendanceStatus).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [BoxShadow(color: _getStatusColor(record.attendanceStatus).withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 4))],
-                              ),
-                              child: Text(
-                                record.attendanceStatus,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  color: _getStatusColor(record.attendanceStatus),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+              const SizedBox(height: 12),
+              // Filter recent attendance by selected section and clean duplicates
+              Builder(
+                builder: (context) {
+                  final filtered = _selectedSectionId == null 
+                      ? _attendanceRecords 
+                      : _attendanceRecords.where((r) => r.sectionId == _selectedSectionId).toList();
+                  final cleaned = _getCleanedAttendanceRecords(filtered);
+                  
+                  return cleaned.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No attendance records found',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: cleaned.length,
+                          itemBuilder: (context, index) {
+                            final record = cleaned[index];
+                            final sectionName = _sectionNames[record.sectionId] ?? 'Unknown Section';
+
+                            return FutureBuilder<String?>(
+                              future: _fetchStudentName(record.studentId),
+                              builder: (context, snapshot) {
+                                final studentName = snapshot.data ?? 'Unknown Student';
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: MediaQuery.of(context).size.width < 600 ? 12 : 14,
+                                    vertical: MediaQuery.of(context).size.width < 600 ? 12 : 14,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(color: Colors.grey.shade200, width: 1),
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Top row: Name label and value with Time on right
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Flexible(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Name:',
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: MediaQuery.of(context).size.width < 600 ? 11 : 12,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: Colors.grey.shade500,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  studentName,
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: MediaQuery.of(context).size.width < 600 ? 14 : 15,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Colors.grey.shade900,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                'Time:',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: MediaQuery.of(context).size.width < 600 ? 11 : 12,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: Colors.grey.shade500,
+                                                ),
+                                              ),
+                                              Text(
+                                                record.displayTime,
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: MediaQuery.of(context).size.width < 600 ? 14 : 15,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.grey.shade900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      // Bottom row: Section label and value with Status on right
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          Flexible(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Section:',
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: MediaQuery.of(context).size.width < 600 ? 11 : 12,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: Colors.grey.shade500,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  sectionName,
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: MediaQuery.of(context).size.width < 600 ? 13 : 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          // Status badge
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: _getStatusColor(record.attendanceStatus).withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              record.attendanceStatus,
+                                              style: GoogleFonts.poppins(
+                                                fontSize: MediaQuery.of(context).size.width < 600 ? 11 : 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: _getStatusColor(record.attendanceStatus),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         );
-                      },
-                    ),
+                },
+              ),
             ],
           ),
         ),
@@ -321,244 +450,398 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     }
   }
 
-  Widget _buildAttendanceChart({bool large = false}) {
-    final records = _selectedSectionId == null
-        ? _attendanceRecords
-        : _attendanceRecords.where((r) => r.sectionId == _selectedSectionId).toList();
-    final total = records.length;
-    if (total == 0) {
-      return const Center(
-        child: Text(
-          'No data for chart',
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
+  /// Filter attendance records to show only the most recent per student per date
+  List<Attendance> _getCleanedAttendanceRecords(List<Attendance> records) {
+    final Map<String, Attendance> latestByStudentDate = {};
+    
+    for (final record in records) {
+      final key = '${record.studentId}_${DateFormat('yyyy-MM-dd').format(record.date)}';
+      
+      // Keep only the most recent record for each student on each date
+      if (!latestByStudentDate.containsKey(key)) {
+        latestByStudentDate[key] = record;
+      } else {
+        final existing = latestByStudentDate[key]!;
+        // Compare timestamps; prefer the one marked later (most recent)
+        if (record.timestamp != null && existing.timestamp != null) {
+          if (record.timestamp!.isAfter(existing.timestamp!)) {
+            latestByStudentDate[key] = record;
+          }
+        } else if (record.timestamp != null) {
+          latestByStudentDate[key] = record;
+        }
+      }
     }
-
-    final presentCount = records.where((r) => r.attendanceStatus == 'Present').length.toDouble();
-    final absentCount = records.where((r) => r.attendanceStatus == 'Absent').length.toDouble();
-    final lateCount = records.where((r) => r.attendanceStatus == 'Late').length.toDouble();
-
-    final sections = <PieChartSectionData>[];
-    // Modern color palette
-    final presentColor = Colors.green.shade600;
-    final lateColor = Colors.orange.shade600;
-    final absentColor = Colors.red.shade600;
-
-    if (presentCount > 0) {
-      sections.add(PieChartSectionData(
-        value: presentCount,
-        title: '',
-        color: presentColor,
-        radius: large ? 80 : 60,
-        badgeWidget: null,
-      ));
-    }
-    if (lateCount > 0) {
-      sections.add(PieChartSectionData(
-        value: lateCount,
-        title: '',
-        color: lateColor,
-        radius: large ? 70 : 50,
-      ));
-    }
-    if (absentCount > 0) {
-      sections.add(PieChartSectionData(
-        value: absentCount,
-        title: '',
-        color: absentColor,
-        radius: large ? 60 : 45,
-      ));
-    }
-
-    // Build a donut chart with centered total and clearer legend showing counts + percentages
-    final totalCount = (presentCount + absentCount + lateCount).toDouble();
-
-    return Column(
-      children: [
-        SizedBox(
-          height: large ? 220 : 170,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // subtle elevated circle behind chart to create depth
-              Positioned.fill(
-                child: Align(
-                  alignment: Alignment.center,
-                  child: Container(
-                    width: large ? 220 : 160,
-                    height: large ? 220 : 160,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(colors: [Colors.white, Colors.grey.shade50]),
-                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 8))],
-                    ),
-                  ),
-                ),
-              ),
-              PieChart(
-                PieChartData(
-                  sections: sections,
-                  centerSpaceRadius: large ? 56 : 44,
-                  sectionsSpace: 6,
-                  pieTouchData: PieTouchData(enabled: true),
-                  centerSpaceColor: Colors.white,
-                ),
-              ),
-              // Center bold total
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('${totalCount.toInt()}', style: GoogleFonts.poppins(fontSize: large ? 26 : 20, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text('Total', style: GoogleFonts.poppins(fontSize: large ? 14 : 12, color: Colors.grey.shade600)),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Legend row with counts and percentages
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            if (presentCount > 0) _legendTile('Present', presentColor, presentCount, totalCount),
-            if (lateCount > 0) _legendTile('Late', lateColor, lateCount, totalCount),
-            if (absentCount > 0) _legendTile('Absent', absentColor, absentCount, totalCount),
-          ],
-        ),
-      ],
-    );
+    
+    // Convert back to list and sort by date descending
+    final result = latestByStudentDate.values.toList();
+    result.sort((a, b) => b.date.compareTo(a.date));
+    return result;
   }
 
-  Widget _legendTile(String label, Color color, double count, double total) {
-    final percent = total > 0 ? (count / total * 100).round() : 0;
-    return Row(
-      children: [
-        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
-            Text('$percent% · ${count.toInt()}', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
-          ],
-        ),
-      ],
-    );
+  /// Fetch student name by studentId
+  Future<String?> _fetchStudentName(String studentId) async {
+    final firestoreProvider = Provider.of<FirestoreProvider>(context, listen: false);
+    try {
+      final user = await firestoreProvider.getUser(studentId);
+      return user?.name ?? 'Unknown Student';
+    } catch (_) {
+      return 'Unknown Student';
+    }
   }
 
-  /// Smooth, accessible trend chart for teacher overall statistics.
-  /// Shows present counts over the [_dailyCounts] window as a curved line
-  /// with a soft gradient area fill. Tooltips show Present/Late/Absent per day.
-  Widget _buildTrendChart({bool large = false}) {
+  /// Bar chart showing daily attendance (Present vs Absent)
+  Widget _buildBarChart({bool large = false}) {
     if (_dailyCounts.isEmpty) {
       return const Center(child: Text('No daily history available', style: TextStyle(color: Colors.grey)));
     }
 
-    final colorPrimary = Colors.blue.shade600;
-    final spots = <FlSpot>[];
-    for (var i = 0; i < _dailyCounts.length; i++) {
-      final present = ( _dailyCounts[i]['present'] as int? ) ?? 0;
-      spots.add(FlSpot(i.toDouble(), present.toDouble()));
+    return AttendanceBarChart(
+      presentData: _dailyCounts.map((d) => (d['present'] as int?) ?? 0).toList(),
+      absentData: _dailyCounts.map((d) => (d['absent'] as int?) ?? 0).toList(),
+      dates: _dailyCounts.map((d) => d['date'] as String? ?? '').toList(),
+      large: large,
+    );
+  }
+}
+
+/// Reusable attendance bar chart widget with clean box-style layout
+class AttendanceBarChart extends StatelessWidget {
+  final List<int> presentData;
+  final List<int> absentData;
+  final List<String> dates;
+  final bool large;
+
+  const AttendanceBarChart({
+    super.key,
+    required this.presentData,
+    required this.absentData,
+    required this.dates,
+    this.large = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const presentColor = Color(0xFF22C55E); // green when more present
+    const absentColor = Color(0xFFEF4444);  // red when more absent
+
+    // Compute y max based on total attendance per day
+    double maxY = 0;
+    for (int i = 0; i < presentData.length; i++) {
+      final total = presentData[i] + absentData[i];
+      maxY = maxY > total.toDouble() ? maxY : total.toDouble();
     }
+    maxY = (maxY * 1.2).clamp(5.0, double.infinity);
 
-    // Determine y max
-    final maxYVal = spots.map((s) => s.y).fold<double>(0, (p, e) => e > p ? e : p);
-    final maxY = (maxYVal * 1.3).clamp(5.0, double.infinity);
+    // Build single bar per day; color reflects which count is higher
+    final groups = <BarChartGroupData>[];
+    for (var i = 0; i < presentData.length; i++) {
+      final present = presentData[i];
+      final absent = absentData[i];
+      final total = present + absent;
+      final barColor = present >= absent ? presentColor : absentColor;
 
-    return SizedBox(
-      height: large ? 360 : 260,
-      child: LineChart(
-        LineChartData(
-          minY: 0,
-          maxY: maxY,
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.shade200, strokeWidth: 1),
-          ),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 56,
-                getTitlesWidget: (value, meta) {
-                  final idx = value.toInt();
-                  if (idx < 0 || idx >= _dailyCounts.length) return const SizedBox.shrink();
-                  final label = _dailyCounts[idx]['date'] as String? ?? '';
-                  try {
-                    final dt = DateTime.parse(label);
-                    final short = DateFormat.MMMd().format(dt);
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Transform.rotate(
-                        angle: -0.15,
-                        child: Text(short, style: TextStyle(fontSize: large ? 14 : 12, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
-                      ),
-                    );
-                  } catch (_) {
-                    return Padding(padding: const EdgeInsets.only(top: 6), child: Text(label, style: TextStyle(fontSize: large ? 14 : 12)));
-                  }
-                },
-              ),
-            ),
-          ),
-          lineTouchData: LineTouchData(
-            enabled: true,
-            touchTooltipData: LineTouchTooltipData(
-              getTooltipItems: (touchedSpots) {
-                return touchedSpots.map((t) {
-                  final idx = t.x.toInt();
-                  final item = _dailyCounts[idx];
-                  final date = item['date'] as String? ?? '';
-                  final present = item['present'] as int? ?? 0;
-                  final late = item['late'] as int? ?? 0;
-                  final absent = item['absent'] as int? ?? 0;
-                  String labelText;
-                  try {
-                    labelText = DateFormat.yMMMd().format(DateTime.parse(date));
-                  } catch (_) {
-                    labelText = date;
-                  }
-                  return LineTooltipItem(
-                    '$labelText\nPresent: $present\nLate: $late\nAbsent: $absent',
-                    const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
-                  );
-                }).toList();
-              },
-            ),
-          ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isCurved: true,
-              curveSmoothness: 0.4,
-              gradient: LinearGradient(colors: [colorPrimary.withValues(alpha: 0.95), colorPrimary.withValues(alpha: 0.7)]),
-              barWidth: large ? 4 : 3,
-              isStrokeCapRound: true,
-              dotData: FlDotData(
-                show: true,
-                getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                  radius: large ? 5 : 4,
-                  color: colorPrimary,
-                  strokeWidth: 1.5,
-                  strokeColor: Colors.white,
-                ),
-              ),
-              belowBarData: BarAreaData(
-                show: true,
-                gradient: LinearGradient(colors: [colorPrimary.withValues(alpha: 0.25), colorPrimary.withValues(alpha: 0.04)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-              ),
+      groups.add(
+        BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: total.toDouble(),
+              width: large ? 24 : 20,
+              borderRadius: BorderRadius.zero,
+              color: barColor,
             ),
           ],
         ),
-      ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Legend box with improved spacing
+        Container(
+          color: Colors.grey.shade50,
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.of(context).size.width < 600 ? 12 : 16,
+            vertical: MediaQuery.of(context).size.width < 600 ? 10 : 14,
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Present (Green) legend
+                Container(
+                  width: 12,
+                  height: 12,
+                  color: presentColor,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'More Present',
+                  style: GoogleFonts.poppins(
+                    fontSize: MediaQuery.of(context).size.width < 600 ? 11 : 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                SizedBox(width: MediaQuery.of(context).size.width < 600 ? 16 : 40),
+                // Absent (Red) legend
+                Container(
+                  width: 12,
+                  height: 12,
+                  color: absentColor,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'More Absent',
+                  style: GoogleFonts.poppins(
+                    fontSize: MediaQuery.of(context).size.width < 600 ? 11 : 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Chart box
+        Expanded(
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.only(left: 8, right: 16, top: 16, bottom: 16),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Stack(
+                  children: [
+                    // Vertical separator lines for each date (behind the chart)
+                    CustomPaint(
+                      painter: _VerticalDateSeparatorPainter(
+                        dateCount: dates.length,
+                        separatorColor: const Color(0x0D000000), // 5% opacity
+                      ),
+                      size: Size.infinite,
+                    ),
+                    // Bar chart (on top for touch interaction)
+                    BarChart(
+                      BarChartData(
+                        alignment: BarChartAlignment.spaceAround,
+                        maxY: maxY,
+                        minY: 0,
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          getDrawingHorizontalLine: (value) => FlLine(
+                            color: Colors.grey.shade200,
+                            strokeWidth: 0.8,
+                          ),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        barGroups: groups,
+                        titlesData: FlTitlesData(
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 28,
+                              interval: (maxY / 5)
+                                  .floorToDouble()
+                                  .clamp(1.0, double.infinity),
+                              getTitlesWidget: (value, meta) {
+                                if (value % 1 != 0) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Text(
+                                  value.toInt().toString(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                );
+                              },
+                            ),
+                          ),
+                          topTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 36,
+                              getTitlesWidget: (value, meta) {
+                                final idx = value.toInt();
+                                if (idx < 0 || idx >= dates.length) {
+                                  return const SizedBox.shrink();
+                                }
+                                final label = dates[idx];
+                                try {
+                                  final dt = DateTime.parse(label);
+                                  final isSmallScreen = MediaQuery.of(context).size.width < 600;
+                                  final short = isSmallScreen 
+                                      ? DateFormat('d').format(dt)  // Just day number for small screens
+                                      : DateFormat('MMM d').format(dt);  // Month and day for large screens
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      short,
+                                      style: TextStyle(
+                                        fontSize: isSmallScreen ? 10 : 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  );
+                                } catch (_) {
+                                  return Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        barTouchData: BarTouchData(
+                          enabled: true,
+                          touchTooltipData: BarTouchTooltipData(
+                            getTooltipColor: (_) => Colors.grey.shade900,
+                            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                              final idx = group.x.toInt();
+                              if (idx < 0 || idx >= dates.length) {
+                                return null;
+                              }
+                              final date = dates[idx];
+                              final present = presentData[idx];
+                              final absent = absentData[idx];
+                              final total = present + absent;
+                              String labelText;
+                              try {
+                                labelText = DateFormat.yMMMd()
+                                    .format(DateTime.parse(date));
+                              } catch (_) {
+                                labelText = date;
+                              }
+                              
+                              final presentColor = Color(0xFF22C55E);
+                              final absentColor = Color(0xFFEF4444);
+                              
+                              return BarTooltipItem(
+                                '',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: '$labelText\n\n',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: '● Present: ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: '$present\n',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: presentColor,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: '● Absent: ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: '$absent\n\n',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: absentColor,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: 'Total: $total',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
-  
 }
+
+/// Custom painter for vertical date separators
+class _VerticalDateSeparatorPainter extends CustomPainter {
+  final int dateCount;
+  final Color separatorColor;
+
+  _VerticalDateSeparatorPainter({
+    required this.dateCount,
+    required this.separatorColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (dateCount <= 1) return;
+
+    final paint = Paint()
+      ..color = separatorColor
+      ..strokeWidth = 1.0;
+
+    final groupWidth = size.width / dateCount;
+
+    // Draw vertical lines between each date group
+    for (int i = 1; i < dateCount; i++) {
+      final x = i * groupWidth;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_VerticalDateSeparatorPainter oldDelegate) {
+    return oldDelegate.dateCount != dateCount ||
+        oldDelegate.separatorColor != separatorColor;
+  }
+}
+

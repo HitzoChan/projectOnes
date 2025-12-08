@@ -151,6 +151,15 @@ class _StudentProfileEditScreenState extends State<StudentProfileEditScreen> {
 
         await firestoreProvider.updateUser(updatedUser);
 
+        // Clear image cache to force refresh of the new image
+        if (imageUrl != null && imageUrl.isNotEmpty) {
+          final imageProvider = NetworkImage(imageUrl);
+          await imageProvider.evict();
+          // Also clear the entire image cache
+          imageCache.clear();
+          imageCache.clearLiveImages();
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -161,7 +170,7 @@ class _StudentProfileEditScreenState extends State<StudentProfileEditScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context);
+          Navigator.pop(context, true); // Pass true to indicate success
         }
       } catch (e) {
         if (mounted) {
@@ -365,120 +374,6 @@ class _StudentProfileEditScreenState extends State<StudentProfileEditScreen> {
                     }
                     return null;
                   },
-                ),
-
-                const SizedBox(height: 24),
-
-                // Academic Information Header
-                Row(
-                  children: [
-                    Icon(
-                      Icons.school,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Academic Information',
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Grade Level
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedGrade,
-                  decoration: InputDecoration(
-                    labelText: 'Grade Level',
-                    prefixIcon: const Icon(Icons.school_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surface,
-                  ),
-                  items: ['Grade 9', 'Grade 10', 'Grade 11', 'Grade 12']
-                      .map((grade) => DropdownMenuItem(
-                            value: grade,
-                            child: Text(
-                              grade,
-                              style: GoogleFonts.poppins(),
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedGrade = value!;
-                    });
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // Section (Read-only for demo)
-                TextFormField(
-                  initialValue: _selectedSection,
-                  readOnly: true,
-                  decoration: InputDecoration(
-                    labelText: 'Section',
-                    hintText: 'Your current section',
-                    prefixIcon: const Icon(Icons.class_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
-                  ),
-                  style: GoogleFonts.poppins(),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Student ID (Read-only)
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.badge_outlined,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Student ID',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              Text(
-                                _currentUser?.studentId ?? 'N/A',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
 
                 const SizedBox(height: 32),

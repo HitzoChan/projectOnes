@@ -10,6 +10,7 @@ import '../../models/section.dart';
 import '../../models/attendance.dart';
 import '../../models/user.dart' as app_user;
 import '../../providers/firestore_provider.dart';
+import '../../providers/auth_provider.dart';
 
 class SectionDetailsScreen extends StatefulWidget {
   final Section section;
@@ -133,6 +134,7 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
   Section? _section;
 
   List<app_user.User> _students = [];
+  final Map<String, String> _studentNames = {};
   bool _isLoadingStudents = true;
 
   List<Attendance> _attendanceRecords = [];
@@ -185,6 +187,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
 
     setState(() {
       _students = students;
+      _studentNames
+        ..clear()
+        ..addEntries(students.map((s) => MapEntry(s.id, s.name)));
       _isLoadingStudents = false;
     });
   }
@@ -204,6 +209,32 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
       _attendanceRecords = records;
       _isLoadingAttendance = false;
     });
+  }
+
+  Future<void> _markAbsenteesToday() async {
+    final sectionId = _section?.id ?? widget.section.id;
+    final firestoreProvider = context.read<FirestoreProvider>();
+
+    setState(() {
+      _isLoadingAttendance = true;
+    });
+
+    try {
+      final created = await firestoreProvider.markAbsenteesForSection(sectionId);
+      await _fetchAttendanceRecords();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Marked $created students as absent for today.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to mark absentees: $e')),
+      );
+      setState(() {
+        _isLoadingAttendance = false;
+      });
+    }
   }
 
   Future<void> _fetchAnnouncements() async {
@@ -240,201 +271,188 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
     final currentSection = _section ?? widget.section;
     final colorScheme = Theme.of(context).colorScheme;
     final onPrimaryContainer = colorScheme.onPrimaryContainer;
+    final isSmallScreen = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       appBar: CustomAppBar(title: 'Section Details'),
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.fromLTRB(
+              isSmallScreen ? 14 : 18,
+              isSmallScreen ? 14 : 16,
+              isSmallScreen ? 14 : 18,
+              isSmallScreen ? 10 : 12,
+            ),
             color: colorScheme.primaryContainer,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  currentSection.name,
-                  style: GoogleFonts.poppins(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                    color: onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  currentSection.teacherName,
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    color: onPrimaryContainer.withValues(alpha: 0.8),
-                  ),
-                ),
-                const SizedBox(height: 16),
+                // Header with name and schedule
                 Row(
                   children: [
-                    Icon(Icons.schedule,
-                        size: 20, color: onPrimaryContainer.withValues(alpha: 0.7)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentSection.name,
+                            style: GoogleFonts.poppins(
+                              fontSize: isSmallScreen ? 20 : 22,
+                              fontWeight: FontWeight.w700,
+                              color: onPrimaryContainer,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            currentSection.teacherName,
+                            style: GoogleFonts.poppins(
+                              fontSize: isSmallScreen ? 12 : 13,
+                              color: onPrimaryContainer.withValues(alpha: 0.75),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: 8),
-                    Text(
-                      currentSection.schedule,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: onPrimaryContainer.withValues(alpha: 0.7),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isSmallScreen ? 10 : 12,
+                        vertical: isSmallScreen ? 5 : 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: onPrimaryContainer.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.schedule,
+                            size: isSmallScreen ? 14 : 16,
+                            color: onPrimaryContainer.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            currentSection.schedule,
+                            style: GoogleFonts.poppins(
+                              fontSize: isSmallScreen ? 11 : 12,
+                              color: onPrimaryContainer.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (currentSection.subjects.isNotEmpty) ...[
-                  Row(
-                    children: [
-                      Icon(Icons.book,
-                          size: 20, color: onPrimaryContainer.withValues(alpha: 0.7)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: currentSection.subjects.map((subject) {
-                            return Chip(
-                              label: Text(subject,
-                                  style: GoogleFonts.poppins(fontSize: 12)),
-                              backgroundColor:
-                                  colorScheme.primaryContainer.withValues(alpha: 0.2),
-                            );
-                          }).toList(),
+                
+                // Subjects
+                if (currentSection.subjects.isNotEmpty)
+                  Wrap(
+                    spacing: isSmallScreen ? 5 : 6,
+                    runSpacing: isSmallScreen ? 3 : 4,
+                    children: currentSection.subjects.map((subject) {
+                      return Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isSmallScreen ? 8 : 10,
+                          vertical: isSmallScreen ? 3 : 4,
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      icon: const Icon(Icons.edit),
-                      label: Text('Edit Subjects', style: GoogleFonts.poppins()),
-                      onPressed: () async {
-                        final firestoreProvider =
-                            context.read<FirestoreProvider>();
-
-                        final updated =
-                            await showModalBottomSheet<List<String>>(
-                          context: context,
-                          isScrollControlled: true,
-                          builder: (context) {
-                            return _EditSubjectsSheet(
-                              subjects:
-                                  List<String>.from(currentSection.subjects),
-                            );
-                          },
-                        );
-                        if (!context.mounted) return; // Guard same BuildContext after await
-
-                        if (updated != null) {
-                          try {
-                            await firestoreProvider.updateSectionSubjects(
-                                currentSection.id, updated);
-                            if (!context.mounted) return;
-
-                            setState(() {
-                              _section = Section(
-                                id: currentSection.id,
-                                name: currentSection.name,
-                                teacherName: currentSection.teacherName,
-                                studentCount: currentSection.studentCount,
-                                schedule: currentSection.schedule,
-                                joinCode: currentSection.joinCode,
-                                subjects: List<String>.from(updated),
-                              );
-                            });
-                          } catch (e) {
-                            if (!context.mounted) return;
-
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content:
-                                      Text('Failed to update subjects: $e')),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  ],
-                ),
-                if (currentSection.subjects.isEmpty) ...[
-                  const SizedBox(height: 8),
+                        decoration: BoxDecoration(
+                          color: onPrimaryContainer.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          subject,
+                          style: GoogleFonts.poppins(
+                            fontSize: isSmallScreen ? 10 : 11,
+                            fontWeight: FontWeight.w500,
+                            color: onPrimaryContainer,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  )
+                else
                   Text(
-                    'No subjects assigned yet. Use Edit to add subjects.',
+                    'No subjects assigned yet',
                     style: GoogleFonts.poppins(
-                      fontSize: 12,
+                      fontSize: isSmallScreen ? 10 : 11,
                       color: onPrimaryContainer.withValues(alpha: 0.7),
                     ),
                   ),
-                ],
+                const SizedBox(height: 6),
+                
+                // Student count
                 Row(
                   children: [
                     Icon(Icons.group,
-                        size: 20, color: onPrimaryContainer.withValues(alpha: 0.7)),
-                    const SizedBox(width: 8),
+                        size: isSmallScreen ? 16 : 18,
+                        color: onPrimaryContainer.withValues(alpha: 0.7)),
+                    const SizedBox(width: 5),
                     Text(
                       '${currentSection.studentCount} Students',
                       style: GoogleFonts.poppins(
-                        fontSize: 14,
+                        fontSize: isSmallScreen ? 11 : 12,
                         color: onPrimaryContainer.withValues(alpha: 0.7),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-
-                // Placeholder card for join code (TODO note removed)
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Join Code',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
+                const SizedBox(height: 8),
+                
+                // Join Code Card
+                Container(
+                  padding: EdgeInsets.all(isSmallScreen ? 8 : 10),
+                  decoration: BoxDecoration(
+                    color: onPrimaryContainer.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Join Code',
+                            style: GoogleFonts.poppins(
+                              fontSize: isSmallScreen ? 9 : 10,
+                              fontWeight: FontWeight.w500,
+                              color: onPrimaryContainer.withValues(alpha: 0.7),
                             ),
-                            Text(
-                              currentSection.joinCode,
-                              style: GoogleFonts.poppins(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: colorScheme.primary,
-                              ),
+                          ),
+                          Text(
+                            currentSection.joinCode,
+                            style: GoogleFonts.poppins(
+                              fontSize: isSmallScreen ? 14 : 16,
+                              fontWeight: FontWeight.w700,
+                              color: onPrimaryContainer,
                             ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.copy),
-                          color: colorScheme.primary,
-                          onPressed: () async {
-                            await Clipboard.setData(
-                                ClipboardData(text: currentSection.joinCode));
-                            if (!context.mounted) return; // Guard same BuildContext
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy),
+                        iconSize: isSmallScreen ? 16 : 18,
+                        color: onPrimaryContainer,
+                        onPressed: () async {
+                          await Clipboard.setData(
+                              ClipboardData(text: currentSection.joinCode));
+                          if (!context.mounted) return;
 
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'Join code copied to clipboard')),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text(
+                                    'Join code copied to clipboard')),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -470,14 +488,58 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushNamed(context, '/generate_qr', arguments: currentSection);
-        },
-        backgroundColor: colorScheme.primary,
-        foregroundColor: colorScheme.onPrimary,
-        child: const Icon(Icons.qr_code_scanner),
-      ),
+      floatingActionButton: _buildRoleBasedFAB(context, currentSection, colorScheme),
+    );
+  }
+
+  Widget _buildRoleBasedFAB(BuildContext context, Section currentSection, ColorScheme colorScheme) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final firebaseUser = authProvider.currentUser;
+    
+    if (firebaseUser == null) return const SizedBox.shrink();
+    
+    // Use FutureBuilder to fetch app user data
+    return FutureBuilder<app_user.User?>(
+      future: Provider.of<FirestoreProvider>(context, listen: false).getUser(firebaseUser.uid),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+        
+        final appUser = snapshot.data;
+        if (appUser == null) return const SizedBox.shrink();
+        
+        // Check if current user is a teacher (teachers see their own sections, students see enrolled sections)
+        final isTeacher = appUser.role == 'teacher';
+        
+        if (isTeacher) {
+          // Teacher: Show QR code button
+          return FloatingActionButton.extended(
+            onPressed: () {
+              Navigator.pushNamed(context, '/generate_qr', arguments: currentSection);
+            },
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            icon: const Icon(Icons.qr_code),
+            label: Text('Show QR', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+          );
+        } else {
+          // Student: Show scanner button to mark attendance
+          return FloatingActionButton.extended(
+            onPressed: () async {
+              // Navigate to scanner for marking attendance
+              await Navigator.pushNamed(context, '/scan_class_qr');
+              // Refresh attendance after scanning
+              if (!mounted) return;
+              _fetchAttendanceRecords();
+            },
+            backgroundColor: colorScheme.secondary,
+            foregroundColor: colorScheme.onSecondary,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text('Scan QR', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+          );
+        }
+      },
     );
   }
 
@@ -496,34 +558,65 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
       );
     }
 
+    final isSmallScreen = MediaQuery.of(context).size.width < 600;
+
     return ListView.builder(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(
+        isSmallScreen ? 12 : 16,
+        isSmallScreen ? 10 : 12,
+        isSmallScreen ? 12 : 16,
+        isSmallScreen ? 10 : 12,
+      ),
       itemCount: _students.length,
       itemBuilder: (context, index) {
         final student = _students[index];
 
-        return Card(
-          elevation: 1,
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            leading: ProfileAvatar(
-              name: student.name,
-              radius: 24,
+        return Container(
+          margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 10),
+          padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1,
             ),
-            title: Text(
-              student.name,
-              style: GoogleFonts.poppins(
-                  fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              'ID: ${student.studentId ?? 'N/A'}',
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          child: Row(
+            children: [
+              ProfileAvatar(
+                name: student.name,
+                radius: isSmallScreen ? 18 : 20,
               ),
-            ),
+              SizedBox(width: isSmallScreen ? 10 : 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      student.name,
+                      style: GoogleFonts.poppins(
+                        fontSize: isSmallScreen ? 13 : 14,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'ID: ${student.studentId ?? 'N/A'}',
+                      style: GoogleFonts.poppins(
+                        fontSize: isSmallScreen ? 10 : 11,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -535,63 +628,134 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_attendanceRecords.isEmpty) {
-      return Center(
-        child: Text(
-          'No attendance records found.',
-          style: GoogleFonts.poppins(
-              fontSize: 16, fontWeight: FontWeight.w500),
-        ),
-      );
-    }
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isTeacher = auth.currentUser != null;
+    final isSmallScreen = MediaQuery.of(context).size.width < 600;
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: _attendanceRecords.length,
-      itemBuilder: (context, index) {
-        final record = _attendanceRecords[index];
-
-        final statusText = record.isPresent ? 'Present' : 'Absent';
-        final statusColor = record.isPresent ? Colors.green : Colors.red;
-
-        return Card(
-          elevation: 1,
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            title: Text(
-              'Date: ${record.date.toLocal().toIso8601String().substring(0, 10)}',
-              style: GoogleFonts.poppins(
-                  fontSize: 16, fontWeight: FontWeight.w600),
+    return Column(
+      children: [
+        if (isTeacher)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              isSmallScreen ? 14 : 20,
+              isSmallScreen ? 14 : 20,
+              isSmallScreen ? 14 : 20,
+              0,
             ),
-            subtitle: Text(
-              'Student ID: ${record.studentId}',
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color:
-                    Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                statusText,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: statusColor,
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.person_off_outlined),
+                label: Text(
+                  'Mark remaining as Absent today',
+                  style: GoogleFonts.poppins(fontSize: isSmallScreen ? 12 : 14),
                 ),
+                onPressed: _markAbsenteesToday,
               ),
             ),
           ),
-        );
-      },
+        if (_attendanceRecords.isEmpty)
+          Expanded(
+            child: Center(
+              child: Text(
+                'No attendance records found.',
+                style: GoogleFonts.poppins(
+                    fontSize: isSmallScreen ? 14 : 16, fontWeight: FontWeight.w500),
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              padding: EdgeInsets.fromLTRB(
+                isSmallScreen ? 12 : 16,
+                isSmallScreen ? 10 : 12,
+                isSmallScreen ? 12 : 16,
+                isSmallScreen ? 10 : 12,
+              ),
+              itemCount: _attendanceRecords.length,
+              itemBuilder: (context, index) {
+                final record = _attendanceRecords[index];
+                final statusText = record.status ?? (record.isPresent ? 'Present' : 'Absent');
+                final statusColor = record.isPresent ? Colors.green : Colors.red;
+                final dateStr = record.date.toLocal().toIso8601String().substring(0, 10);
+
+                return Container(
+                  margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 10),
+                  padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(isSmallScreen ? 8 : 10),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          statusText == 'Present' ? Icons.check_circle : Icons.cancel,
+                          size: isSmallScreen ? 18 : 20,
+                          color: statusColor,
+                        ),
+                      ),
+                      SizedBox(width: isSmallScreen ? 10 : 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _studentNames[record.studentId] ?? 'Unknown student',
+                              style: GoogleFonts.poppins(
+                                fontSize: isSmallScreen ? 13 : 14,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              dateStr,
+                              style: GoogleFonts.poppins(
+                                fontSize: isSmallScreen ? 10 : 11,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isSmallScreen ? 8 : 10,
+                          vertical: isSmallScreen ? 5 : 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          statusText,
+                          style: GoogleFonts.poppins(
+                            fontSize: isSmallScreen ? 10 : 11,
+                            fontWeight: FontWeight.w600,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -618,89 +782,119 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
         child: Text(
           'No announcements yet.',
           style: GoogleFonts.poppins(
-              fontSize: 16, fontWeight: FontWeight.w500),
+              fontSize: MediaQuery.of(context).size.width < 600 ? 14 : 16, fontWeight: FontWeight.w500),
         ),
       );
     }
 
+    final isSmallScreen = MediaQuery.of(context).size.width < 600;
+
     return ListView.builder(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(
+        isSmallScreen ? 12 : 16,
+        isSmallScreen ? 10 : 12,
+        isSmallScreen ? 12 : 16,
+        isSmallScreen ? 10 : 12,
+      ),
       itemCount: _announcements.length,
       itemBuilder: (context, index) {
         final announcement = _announcements[index];
+        final createdAt = announcement['createdAt'] as DateTime;
+        final now = DateTime.now();
+        final difference = now.difference(createdAt);
 
-        // Use Icons.announcement directly to avoid non-constant IconData
-        const iconData = Icons.announcement;
+        String timeAgo;
+        if (difference.inDays > 0) {
+          timeAgo = '${difference.inDays}d ago';
+        } else if (difference.inHours > 0) {
+          timeAgo = '${difference.inHours}h ago';
+        } else if (difference.inMinutes > 0) {
+          timeAgo = '${difference.inMinutes}m ago';
+        } else {
+          timeAgo = 'Just now';
+        }
 
-        return Card(
-          elevation: 1,
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(iconData,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+        return Container(
+          margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 10),
+          padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        announcement['title'] ?? '',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                      Container(
+                        padding: EdgeInsets.all(isSmallScreen ? 7 : 8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.announcement_rounded,
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          size: isSmallScreen ? 16 : 18,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        announcement['content'] ?? '',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
+                      SizedBox(width: isSmallScreen ? 8 : 10),
+                      Expanded(
+                        child: Text(
+                          announcement['title'] ?? '',
+                          style: GoogleFonts.poppins(
+                            fontSize: isSmallScreen ? 13 : 14,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        announcement['createdAt'] != null
-                            ? (announcement['createdAt'] as DateTime)
-                                .toLocal()
-                                .toString()
-                            : '',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
-                        ),
-                      ),
+                      SizedBox(width: isSmallScreen ? 24 : 28),
                     ],
                   ),
-                ),
-
-                IconButton(
+                  SizedBox(height: isSmallScreen ? 6 : 8),
+                  Text(
+                    announcement['content'] ?? '',
+                    style: GoogleFonts.poppins(
+                      fontSize: isSmallScreen ? 11 : 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: isSmallScreen ? 6 : 8),
+                  Text(
+                    timeAgo,
+                    style: GoogleFonts.poppins(
+                      fontSize: isSmallScreen ? 9 : 10,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IconButton(
                   icon: const Icon(Icons.delete, color: Colors.redAccent),
+                  iconSize: isSmallScreen ? 18 : 20,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                   onPressed: () async {
                     final firestoreProvider =
                         context.read<FirestoreProvider>();
 
-                      final confirmDelete = await showDialog<bool>(
+                    final confirmDelete = await showDialog<bool>(
                           context: context,
                           builder: (context) => AlertDialog(
                             title: const Text('Delete Announcement'),
@@ -721,7 +915,7 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                           ),
                         ) ??
                         false;
-                      if (!context.mounted) return; // Guard same BuildContext after await
+                    if (!context.mounted) return;
 
                     if (!confirmDelete) return;
 
@@ -748,8 +942,8 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                     }
                   },
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },

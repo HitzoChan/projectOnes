@@ -143,22 +143,6 @@ class _GenerateClassQrScreenState extends State<GenerateClassQrScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('QR code shared!')),
-                  );
-                },
-                icon: const Icon(Icons.share),
-                label: Text(
-                  'Share QR Code',
-                  style: GoogleFonts.poppins(),
-                ),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-              ),
             ],
           ],
         ),

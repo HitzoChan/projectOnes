@@ -186,8 +186,8 @@ class HelpSupportScreen extends StatelessWidget {
                       scheme: 'mailto',
                       path: 'support@school.edu',
                       query: _encodeQuery({
-                        'subject': 'Support Request - Attendance Monitoring App',
-                        'body': 'Describe your issue here.\n\nApp: Attendance Monitoring\n',
+                        'subject': 'Support Request - EduScan App',
+                        'body': 'Describe your issue here.\n\nApp: EduScan\n',
                       }),
                     );
                     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);

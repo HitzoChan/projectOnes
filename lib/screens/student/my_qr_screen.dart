@@ -176,37 +176,6 @@ class _MyQrScreenState extends State<MyQrScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'QR save functionality requires additional permissions. Take a screenshot instead.',
-                              style: GoogleFonts.poppins(fontSize: 12),
-                            ),
-                            duration: const Duration(seconds: 3),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.save_alt),
-                      label: Text(
-                        'Save to Gallery',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
 
