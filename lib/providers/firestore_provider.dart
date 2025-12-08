@@ -12,18 +12,19 @@ class FirestoreProvider with ChangeNotifier {
     String? studentId = user.studentId;
     if (user.role == 'student' && studentId == null) {
       final year = DateTime.now().year;
-      final counterRef =
-          _firestore.collection('counters').doc('student_id_$year');
+      final counterRef = _firestore
+          .collection('counters')
+          .doc('student_id_$year');
 
-      final result =
-          await _firestore.runTransaction<int>((transaction) async {
+      final result = await _firestore.runTransaction<int>((transaction) async {
         final counterDoc = await transaction.get(counterRef);
         int nextNumber = 1;
         if (counterDoc.exists) {
           nextNumber = (counterDoc.data()?['count'] as int? ?? 0) + 1;
         }
-        transaction.set(counterRef, {'count': nextNumber},
-            SetOptions(merge: true));
+        transaction.set(counterRef, {
+          'count': nextNumber,
+        }, SetOptions(merge: true));
         return nextNumber;
       });
 
@@ -88,7 +89,7 @@ class FirestoreProvider with ChangeNotifier {
     final doc = await _firestore.collection('users').doc(userId).get();
     if (doc.exists) {
       final data = doc.data()!;
-      
+
       // Helper function to get non-empty string or null
       String? getNonEmptyString(String key) {
         final value = data[key];
@@ -97,7 +98,7 @@ class FirestoreProvider with ChangeNotifier {
         }
         return value.toString();
       }
-      
+
       return app_user.User(
         id: doc.id,
         name: data['name'],
@@ -128,7 +129,7 @@ class FirestoreProvider with ChangeNotifier {
         'email': user.email,
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      
+
       // Add optional fields only if they have values
       if (user.phone != null && user.phone!.isNotEmpty) {
         data['phone'] = user.phone;
@@ -145,38 +146,41 @@ class FirestoreProvider with ChangeNotifier {
       if (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty) {
         data['profileImageUrl'] = user.profileImageUrl;
       }
-      
+
       // Teacher-specific fields - only add if they have actual values
       if (user.subject != null && user.subject!.isNotEmpty) {
         data['subject'] = user.subject;
       }
-      
+
       if (user.department != null && user.department!.isNotEmpty) {
         data['department'] = user.department;
       }
-      
+
       if (user.yearsOfExperience != null && user.yearsOfExperience! > 0) {
         data['yearsOfExperience'] = user.yearsOfExperience;
       }
-      
+
       if (user.bio != null && user.bio!.isNotEmpty) {
         data['bio'] = user.bio;
       }
-      
+
       if (user.certifications != null && user.certifications!.isNotEmpty) {
         data['certifications'] = user.certifications;
       }
-      
+
       if (user.specializations != null && user.specializations!.isNotEmpty) {
         data['specializations'] = user.specializations;
       }
-      
+
       if (user.availableForConsultation != null) {
         data['availableForConsultation'] = user.availableForConsultation;
       }
-      
+
       // Use set with merge to create fields if they don't exist
-      await _firestore.collection('users').doc(user.id).set(data, SetOptions(merge: true));
+      await _firestore
+          .collection('users')
+          .doc(user.id)
+          .set(data, SetOptions(merge: true));
     } catch (e) {
       rethrow;
     }
@@ -198,7 +202,10 @@ class FirestoreProvider with ChangeNotifier {
     }
 
     // Use set with merge to avoid overwriting unexpected fields
-    await _firestore.collection('sections').doc(section.id).set(data, SetOptions(merge: true));
+    await _firestore
+        .collection('sections')
+        .doc(section.id)
+        .set(data, SetOptions(merge: true));
   }
 
   Future<List<Section>> getSections() async {
@@ -220,7 +227,10 @@ class FirestoreProvider with ChangeNotifier {
   // Get sections for a teacher. Prefer querying by UID (teacherId).
   // `teacherIdentifier` should be the teacher UID; UI callers should pass the current user's uid.
   // For backward compatibility this will fallback to matching `teacherName` and attach teacherId to matched docs.
-  Future<List<Section>> getSectionsByTeacher(String teacherUid, {String? teacherName}) async {
+  Future<List<Section>> getSectionsByTeacher(
+    String teacherUid, {
+    String? teacherName,
+  }) async {
     // First try by teacherId
     final snapshotById = await _firestore
         .collection('sections')
@@ -284,8 +294,9 @@ class FirestoreProvider with ChangeNotifier {
         .where('studentId', isEqualTo: studentId)
         .get();
 
-    final sectionIds =
-        enrollmentSnapshot.docs.map((doc) => doc['sectionId'] as String).toList();
+    final sectionIds = enrollmentSnapshot.docs
+        .map((doc) => doc['sectionId'] as String)
+        .toList();
 
     if (sectionIds.isEmpty) return [];
 
@@ -335,7 +346,9 @@ class FirestoreProvider with ChangeNotifier {
   }
 
   Future<void> enrollStudentInSection(
-      String studentId, String sectionId) async {
+    String studentId,
+    String sectionId,
+  ) async {
     final enrollmentsRef = _firestore.collection('enrollments');
     final sectionRef = _firestore.collection('sections').doc(sectionId);
 
@@ -349,9 +362,36 @@ class FirestoreProvider with ChangeNotifier {
       'enrolledAt': FieldValue.serverTimestamp(),
     });
 
-    batch.update(sectionRef, {
-      'studentCount': FieldValue.increment(1),
-    });
+    batch.update(sectionRef, {'studentCount': FieldValue.increment(1)});
+
+    await batch.commit();
+  }
+
+  Future<void> unenrollStudentFromSection(
+    String studentId,
+    String sectionId,
+  ) async {
+    final enrollmentsRef = _firestore.collection('enrollments');
+    final sectionRef = _firestore.collection('sections').doc(sectionId);
+
+    // Find the enrollment document
+    final enrollmentSnapshot = await enrollmentsRef
+        .where('studentId', isEqualTo: studentId)
+        .where('sectionId', isEqualTo: sectionId)
+        .get();
+
+    if (enrollmentSnapshot.docs.isEmpty) {
+      throw Exception('Enrollment not found');
+    }
+
+    // Use a batch write to remove enrollment and decrement student count atomically
+    final batch = _firestore.batch();
+
+    for (final doc in enrollmentSnapshot.docs) {
+      batch.delete(doc.reference);
+    }
+
+    batch.update(sectionRef, {'studentCount': FieldValue.increment(-1)});
 
     await batch.commit();
   }
@@ -361,11 +401,16 @@ class FirestoreProvider with ChangeNotifier {
   /// Ensures only one attendance record per student per section per day.
   /// Returns `true` if a new attendance document was created, `false` if an existing record was updated.
   Future<bool> markAttendance(Attendance attendance) async {
-    final dayStart = DateTime(attendance.date.year, attendance.date.month, attendance.date.day);
+    final dayStart = DateTime(
+      attendance.date.year,
+      attendance.date.month,
+      attendance.date.day,
+    );
 
     // Use a deterministic daily document ID to avoid race conditions and duplicate writes.
     // Format: {sectionId}_{studentId}_YYYYMMDD
-    final dayKey = '${dayStart.year.toString().padLeft(4, '0')}${dayStart.month.toString().padLeft(2, '0')}${dayStart.day.toString().padLeft(2, '0')}';
+    final dayKey =
+        '${dayStart.year.toString().padLeft(4, '0')}${dayStart.month.toString().padLeft(2, '0')}${dayStart.day.toString().padLeft(2, '0')}';
     final docId = '${attendance.sectionId}_${attendance.studentId}_$dayKey';
     final docRef = _firestore.collection('attendance').doc(docId);
 
@@ -408,7 +453,8 @@ class FirestoreProvider with ChangeNotifier {
     int created = 0;
 
     for (final student in students) {
-      final dayKey = '${dayStart.year.toString().padLeft(4, '0')}${dayStart.month.toString().padLeft(2, '0')}${dayStart.day.toString().padLeft(2, '0')}';
+      final dayKey =
+          '${dayStart.year.toString().padLeft(4, '0')}${dayStart.month.toString().padLeft(2, '0')}${dayStart.day.toString().padLeft(2, '0')}';
       final docId = '${sectionId}_${student.id}_$dayKey';
       final docRef = _firestore.collection('attendance').doc(docId);
       final existing = await docRef.get();
@@ -442,9 +488,9 @@ class FirestoreProvider with ChangeNotifier {
         .where('studentId', isEqualTo: studentId)
         .limit(1)
         .get();
-    
+
     if (snapshot.docs.isEmpty) return null;
-    
+
     final doc = snapshot.docs.first;
     final data = doc.data();
     return app_user.User(
@@ -470,7 +516,9 @@ class FirestoreProvider with ChangeNotifier {
         date: (data['date'] as Timestamp).toDate(),
         isPresent: data['isPresent'],
         status: data['status'],
-        timestamp: data['timestamp'] != null ? (data['timestamp'] as Timestamp).toDate() : null,
+        timestamp: data['timestamp'] != null
+            ? (data['timestamp'] as Timestamp).toDate()
+            : null,
       );
     }).toList();
   }
@@ -489,7 +537,9 @@ class FirestoreProvider with ChangeNotifier {
         date: (data['date'] as Timestamp).toDate(),
         isPresent: data['isPresent'],
         status: data['status'],
-        timestamp: data['timestamp'] != null ? (data['timestamp'] as Timestamp).toDate() : null,
+        timestamp: data['timestamp'] != null
+            ? (data['timestamp'] as Timestamp).toDate()
+            : null,
       );
     }).toList();
 
@@ -499,14 +549,22 @@ class FirestoreProvider with ChangeNotifier {
 
   /// Returns daily aggregated attendance counts for a teacher's sections for the past [days] days.
   /// Each map contains: 'date' (ISO yyyy-MM-dd), 'present', 'absent', 'late'.
-  Future<List<Map<String, dynamic>>> getDailyAttendanceCountsForTeacher(String teacherUid, {int days = 7, String? sectionId}) async {
+  Future<List<Map<String, dynamic>>> getDailyAttendanceCountsForTeacher(
+    String teacherUid, {
+    int days = 7,
+    String? sectionId,
+  }) async {
     // Prefer querying by teacherId on attendance docs. This is more efficient than whereIn(sectionId).
     // If attendance docs were created before teacherId was added, consider running `backfillAttendanceTeacherIds`.
     final now = DateTime.now();
     final results = <Map<String, dynamic>>[];
 
     for (var d = days - 1; d >= 0; d--) {
-      final day = DateTime(now.year, now.month, now.day).subtract(Duration(days: d));
+      final day = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: d));
       final dayStart = DateTime(day.year, day.month, day.day);
       final dayEnd = dayStart.add(const Duration(days: 1));
 
@@ -531,7 +589,10 @@ class FirestoreProvider with ChangeNotifier {
           final snapshot = await _firestore
               .collection('attendance')
               .where('teacherId', isEqualTo: teacherUid)
-              .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+              .where(
+                'date',
+                isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart),
+              )
               .where('date', isLessThan: Timestamp.fromDate(dayEnd))
               .get();
 
@@ -540,7 +601,9 @@ class FirestoreProvider with ChangeNotifier {
             final data = doc.data() as Map<String, dynamic>?;
             final statusRaw = data?['status'];
             final isPresentRaw = data?['isPresent'];
-            final status = statusRaw?.toString() ?? (isPresentRaw == true ? 'Present' : 'Absent');
+            final status =
+                statusRaw?.toString() ??
+                (isPresentRaw == true ? 'Present' : 'Absent');
             if (status == 'Present') {
               present++;
             } else if (status == 'Late') {
@@ -551,7 +614,9 @@ class FirestoreProvider with ChangeNotifier {
           }
         } on FirebaseException catch (e) {
           // If the query fails (e.g. due to index issues), fallback to section-based chunked queries.
-          debugPrint('teacher-based attendance query failed: ${e.code} ${e.message}');
+          debugPrint(
+            'teacher-based attendance query failed: ${e.code} ${e.message}',
+          );
           await _aggregateBySections(dayStart, dayEnd, teacherUid, (status) {
             if (status == 'Present') {
               present++;
@@ -578,7 +643,8 @@ class FirestoreProvider with ChangeNotifier {
       }
 
       results.add({
-        'date': '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
+        'date':
+            '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
         'present': present,
         'absent': absent,
         'late': late,
@@ -589,12 +655,20 @@ class FirestoreProvider with ChangeNotifier {
   }
 
   /// Get daily attendance counts for a student (aggregates across sections or for a specific section)
-  Future<List<Map<String, dynamic>>> getDailyAttendanceCountsForStudent(String studentId, {int days = 7, String? sectionId}) async {
+  Future<List<Map<String, dynamic>>> getDailyAttendanceCountsForStudent(
+    String studentId, {
+    int days = 7,
+    String? sectionId,
+  }) async {
     final now = DateTime.now();
     final results = <Map<String, dynamic>>[];
 
     for (var d = days - 1; d >= 0; d--) {
-      final day = DateTime(now.year, now.month, now.day).subtract(Duration(days: d));
+      final day = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: d));
       final dayStart = DateTime(day.year, day.month, day.day);
       final dayEnd = dayStart.add(const Duration(days: 1));
 
@@ -620,8 +694,10 @@ class FirestoreProvider with ChangeNotifier {
         final data = doc.data() as Map<String, dynamic>?;
         final statusRaw = data?['status'];
         final isPresentRaw = data?['isPresent'];
-        final status = statusRaw?.toString() ?? (isPresentRaw == true ? 'Present' : 'Absent');
-        
+        final status =
+            statusRaw?.toString() ??
+            (isPresentRaw == true ? 'Present' : 'Absent');
+
         if (status == 'Present') {
           present++;
         } else {
@@ -630,7 +706,8 @@ class FirestoreProvider with ChangeNotifier {
       }
 
       results.add({
-        'date': '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
+        'date':
+            '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
         'present': present,
         'absent': absent,
       });
@@ -640,8 +717,16 @@ class FirestoreProvider with ChangeNotifier {
   }
 
   // Helper: aggregate attendance by teacher sections (covers docs missing teacherId)
-  Future<void> _aggregateBySections(DateTime dayStart, DateTime dayEnd, String teacherUid, void Function(String status) tally, {List<String>? sectionIdsOverride}) async {
-    final sectionIds = sectionIdsOverride ?? (await getSectionsByTeacher(teacherUid)).map((s) => s.id).toList();
+  Future<void> _aggregateBySections(
+    DateTime dayStart,
+    DateTime dayEnd,
+    String teacherUid,
+    void Function(String status) tally, {
+    List<String>? sectionIdsOverride,
+  }) async {
+    final sectionIds =
+        sectionIdsOverride ??
+        (await getSectionsByTeacher(teacherUid)).map((s) => s.id).toList();
 
     if (sectionIds.isEmpty) return;
 
@@ -649,14 +734,17 @@ class FirestoreProvider with ChangeNotifier {
     List<List<String>> chunked(List<String> list, int size) {
       final out = <List<String>>[];
       for (var i = 0; i < list.length; i += size) {
-        out.add(list.sublist(i, i + size > list.length ? list.length : i + size));
+        out.add(
+          list.sublist(i, i + size > list.length ? list.length : i + size),
+        );
       }
       return out;
     }
 
     final chunks = chunked(sectionIds, 10);
     for (final chunk in chunks) {
-      Query query = _firestore.collection('attendance')
+      Query query = _firestore
+          .collection('attendance')
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
           .where('date', isLessThan: Timestamp.fromDate(dayEnd));
 
@@ -671,7 +759,9 @@ class FirestoreProvider with ChangeNotifier {
         final data = doc.data() as Map<String, dynamic>?;
         final statusRaw = data?['status'];
         final isPresentRaw = data?['isPresent'];
-        final status = statusRaw?.toString() ?? (isPresentRaw == true ? 'Present' : 'Absent');
+        final status =
+            statusRaw?.toString() ??
+            (isPresentRaw == true ? 'Present' : 'Absent');
         tally(status);
       }
     }
@@ -688,7 +778,10 @@ class FirestoreProvider with ChangeNotifier {
   Future<int> backfillAttendanceTeacherIds({int batchSize = 200}) async {
     int updated = 0;
     // Query attendance docs that don't have teacherId set. Firestore supports `where('field', isNull: true)`.
-    Query query = _firestore.collection('attendance').where('teacherId', isNull: true).limit(batchSize);
+    Query query = _firestore
+        .collection('attendance')
+        .where('teacherId', isNull: true)
+        .limit(batchSize);
 
     while (true) {
       final snapshot = await query.get();
@@ -727,7 +820,11 @@ class FirestoreProvider with ChangeNotifier {
     int deleted = 0;
 
     // We'll page through attendance docs ordered by sectionId then studentId.
-    Query query = _firestore.collection('attendance').orderBy('sectionId').orderBy('studentId').limit(batchSize);
+    Query query = _firestore
+        .collection('attendance')
+        .orderBy('sectionId')
+        .orderBy('studentId')
+        .limit(batchSize);
     while (true) {
       final snapshot = await query.get();
       if (snapshot.docs.isEmpty) break;
@@ -749,7 +846,8 @@ class FirestoreProvider with ChangeNotifier {
           continue;
         }
 
-        final dayKey = '${sectionId}_${studentId}_${dt.year.toString().padLeft(4,'0')}${dt.month.toString().padLeft(2,'0')}${dt.day.toString().padLeft(2,'0')}';
+        final dayKey =
+            '${sectionId}_${studentId}_${dt.year.toString().padLeft(4, '0')}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}';
         groups.putIfAbsent(dayKey, () => []).add(doc);
       }
 
@@ -795,7 +893,12 @@ class FirestoreProvider with ChangeNotifier {
       if (snapshot.docs.length < batchSize) {
         break;
       }
-      query = _firestore.collection('attendance').orderBy('sectionId').orderBy('studentId').startAfterDocument(snapshot.docs.last).limit(batchSize);
+      query = _firestore
+          .collection('attendance')
+          .orderBy('sectionId')
+          .orderBy('studentId')
+          .startAfterDocument(snapshot.docs.last)
+          .limit(batchSize);
     }
 
     return deleted;
@@ -803,8 +906,11 @@ class FirestoreProvider with ChangeNotifier {
 
   // Announcement operations
   Future<void> createAnnouncement(
-      String title, String content, String teacherId,
-      {List<String>? sectionIds}) async {
+    String title,
+    String content,
+    String teacherId, {
+    List<String>? sectionIds,
+  }) async {
     await _firestore.collection('announcements').add({
       'title': title,
       'content': content,
@@ -839,7 +945,10 @@ class FirestoreProvider with ChangeNotifier {
     await batch.commit();
   }
 
-  Future<void> updateSectionSubjects(String sectionId, List<String> subjects) async {
+  Future<void> updateSectionSubjects(
+    String sectionId,
+    List<String> subjects,
+  ) async {
     debugPrint('Updating section($sectionId) subjects: $subjects');
     await _firestore.collection('sections').doc(sectionId).update({
       'subjects': subjects,
@@ -866,8 +975,9 @@ class FirestoreProvider with ChangeNotifier {
   }
 
   // FIXED NULL-SAFETY + TYPE CASTING HERE 👇
-  Future<List<Map<String, dynamic>>> getAnnouncements(
-      {String? sectionId}) async {
+  Future<List<Map<String, dynamic>>> getAnnouncements({
+    String? sectionId,
+  }) async {
     Query query = _firestore
         .collection('announcements')
         .orderBy('createdAt', descending: true);
@@ -879,8 +989,7 @@ class FirestoreProvider with ChangeNotifier {
     final snapshot = await query.get();
 
     return snapshot.docs.map((doc) {
-      final Map<String, dynamic>? data =
-          doc.data() as Map<String, dynamic>?;
+      final Map<String, dynamic>? data = doc.data() as Map<String, dynamic>?;
 
       if (data == null) {
         return {
@@ -905,4 +1014,3 @@ class FirestoreProvider with ChangeNotifier {
     }).toList();
   }
 }
-

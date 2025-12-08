@@ -73,17 +73,24 @@ class _EditSubjectsSheetState extends State<_EditSubjectsSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Edit Subjects',
-              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
+          Text(
+            'Edit Subjects',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 6,
             children: _subjects
-                .map((s) => Chip(
-                      label: Text(s, style: GoogleFonts.poppins()),
-                      onDeleted: () => _removeSubject(s),
-                    ))
+                .map(
+                  (s) => Chip(
+                    label: Text(s, style: GoogleFonts.poppins()),
+                    onDeleted: () => _removeSubject(s),
+                  ),
+                )
                 .toList(),
           ),
           const SizedBox(height: 12),
@@ -94,15 +101,14 @@ class _EditSubjectsSheetState extends State<_EditSubjectsSheet> {
                   controller: _controller,
                   decoration: InputDecoration(
                     labelText: 'New Subject',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _addSubject,
-                child: const Text('Add'),
-              ),
+              ElevatedButton(onPressed: _addSubject, child: const Text('Add')),
             ],
           ),
           const SizedBox(height: 12),
@@ -170,7 +176,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
       setState(() {
         _section = section;
       });
-      debugPrint('Loaded section ${section.id} with subjects: ${section.subjects}');
+      debugPrint(
+        'Loaded section ${section.id} with subjects: ${section.subjects}',
+      );
     }
   }
 
@@ -220,17 +228,21 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
     });
 
     try {
-      final created = await firestoreProvider.markAbsenteesForSection(sectionId);
+      final created = await firestoreProvider.markAbsenteesForSection(
+        sectionId,
+      );
       await _fetchAttendanceRecords();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Marked $created students as absent for today.')),
+        SnackBar(
+          content: Text('Marked $created students as absent for today.'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to mark absentees: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to mark absentees: $e')));
       setState(() {
         _isLoadingAttendance = false;
       });
@@ -247,8 +259,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
 
     try {
       final sectionId = _section?.id ?? widget.section.id;
-      final announcements =
-          await firestoreProvider.getAnnouncements(sectionId: sectionId);
+      final announcements = await firestoreProvider.getAnnouncements(
+        sectionId: sectionId,
+      );
 
       if (!mounted) return;
 
@@ -263,6 +276,60 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
         _isLoadingAnnouncements = false;
         _announcementsError = e.toString();
       });
+    }
+  }
+
+  Future<void> _confirmDeleteStudent(app_user.User student) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove Student', style: GoogleFonts.poppins()),
+        content: Text(
+          'Are you sure you want to remove ${student.name} from this section?',
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel', style: GoogleFonts.poppins()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('Remove', style: GoogleFonts.poppins()),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    if (!mounted) return;
+
+    try {
+      final firestoreProvider = context.read<FirestoreProvider>();
+      final sectionId = _section?.id ?? widget.section.id;
+
+      await firestoreProvider.unenrollStudentFromSection(student.id, sectionId);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${student.name} removed from section')),
+      );
+
+      // Refresh the students list and section data
+      await _fetchStudents();
+      await _loadSection();
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to remove student: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -350,7 +417,7 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                   ],
                 ),
                 const SizedBox(height: 8),
-                
+
                 // Subjects
                 if (currentSection.subjects.isNotEmpty)
                   Wrap(
@@ -386,13 +453,15 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                     ),
                   ),
                 const SizedBox(height: 6),
-                
+
                 // Student count
                 Row(
                   children: [
-                    Icon(Icons.group,
-                        size: isSmallScreen ? 16 : 18,
-                        color: onPrimaryContainer.withValues(alpha: 0.7)),
+                    Icon(
+                      Icons.group,
+                      size: isSmallScreen ? 16 : 18,
+                      color: onPrimaryContainer.withValues(alpha: 0.7),
+                    ),
                     const SizedBox(width: 5),
                     Text(
                       '${currentSection.studentCount} Students',
@@ -404,7 +473,7 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                   ],
                 ),
                 const SizedBox(height: 8),
-                
+
                 // Join Code Card
                 Container(
                   padding: EdgeInsets.all(isSmallScreen ? 8 : 10),
@@ -442,13 +511,14 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                         color: onPrimaryContainer,
                         onPressed: () async {
                           await Clipboard.setData(
-                              ClipboardData(text: currentSection.joinCode));
+                            ClipboardData(text: currentSection.joinCode),
+                          );
                           if (!context.mounted) return;
 
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                                content: Text(
-                                    'Join code copied to clipboard')),
+                              content: Text('Join code copied to clipboard'),
+                            ),
                           );
                         },
                       ),
@@ -488,40 +558,58 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
           ),
         ],
       ),
-      floatingActionButton: _buildRoleBasedFAB(context, currentSection, colorScheme),
+      floatingActionButton: _buildRoleBasedFAB(
+        context,
+        currentSection,
+        colorScheme,
+      ),
     );
   }
 
-  Widget _buildRoleBasedFAB(BuildContext context, Section currentSection, ColorScheme colorScheme) {
+  Widget _buildRoleBasedFAB(
+    BuildContext context,
+    Section currentSection,
+    ColorScheme colorScheme,
+  ) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final firebaseUser = authProvider.currentUser;
-    
+
     if (firebaseUser == null) return const SizedBox.shrink();
-    
+
     // Use FutureBuilder to fetch app user data
     return FutureBuilder<app_user.User?>(
-      future: Provider.of<FirestoreProvider>(context, listen: false).getUser(firebaseUser.uid),
+      future: Provider.of<FirestoreProvider>(
+        context,
+        listen: false,
+      ).getUser(firebaseUser.uid),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const SizedBox.shrink();
         }
-        
+
         final appUser = snapshot.data;
         if (appUser == null) return const SizedBox.shrink();
-        
+
         // Check if current user is a teacher (teachers see their own sections, students see enrolled sections)
         final isTeacher = appUser.role == 'teacher';
-        
+
         if (isTeacher) {
           // Teacher: Show QR code button
           return FloatingActionButton.extended(
             onPressed: () {
-              Navigator.pushNamed(context, '/generate_qr', arguments: currentSection);
+              Navigator.pushNamed(
+                context,
+                '/generate_qr',
+                arguments: currentSection,
+              );
             },
             backgroundColor: colorScheme.primary,
             foregroundColor: colorScheme.onPrimary,
             icon: const Icon(Icons.qr_code),
-            label: Text('Show QR', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+            label: Text(
+              'Show QR',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+            ),
           );
         } else {
           // Student: Show scanner button to mark attendance
@@ -536,7 +624,10 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
             backgroundColor: colorScheme.secondary,
             foregroundColor: colorScheme.onSecondary,
             icon: const Icon(Icons.qr_code_scanner),
-            label: Text('Scan QR', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+            label: Text(
+              'Scan QR',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+            ),
           );
         }
       },
@@ -552,72 +643,97 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
       return Center(
         child: Text(
           'No students enrolled yet.',
-          style: GoogleFonts.poppins(
-              fontSize: 16, fontWeight: FontWeight.w500),
+          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500),
         ),
       );
     }
 
     final isSmallScreen = MediaQuery.of(context).size.width < 600;
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUserId = authProvider.currentUser?.uid;
 
-    return ListView.builder(
-      padding: EdgeInsets.fromLTRB(
-        isSmallScreen ? 12 : 16,
-        isSmallScreen ? 10 : 12,
-        isSmallScreen ? 12 : 16,
-        isSmallScreen ? 10 : 12,
-      ),
-      itemCount: _students.length,
-      itemBuilder: (context, index) {
-        final student = _students[index];
+    return FutureBuilder<app_user.User?>(
+      future: currentUserId != null
+          ? Provider.of<FirestoreProvider>(
+              context,
+              listen: false,
+            ).getUser(currentUserId)
+          : null,
+      builder: (context, snapshot) {
+        final isTeacher = snapshot.data?.role == 'teacher';
 
-        return Container(
-          margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 10),
-          padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-              width: 1,
-            ),
+        return ListView.builder(
+          padding: EdgeInsets.fromLTRB(
+            isSmallScreen ? 12 : 16,
+            isSmallScreen ? 10 : 12,
+            isSmallScreen ? 12 : 16,
+            isSmallScreen ? 10 : 12,
           ),
-          child: Row(
-            children: [
-              ProfileAvatar(
-                name: student.name,
-                radius: isSmallScreen ? 18 : 20,
-              ),
-              SizedBox(width: isSmallScreen ? 10 : 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      student.name,
-                      style: GoogleFonts.poppins(
-                        fontSize: isSmallScreen ? 13 : 14,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'ID: ${student.studentId ?? 'N/A'}',
-                      style: GoogleFonts.poppins(
-                        fontSize: isSmallScreen ? 10 : 11,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+          itemCount: _students.length,
+          itemBuilder: (context, index) {
+            final student = _students[index];
+
+            return Container(
+              margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 10),
+              padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withValues(alpha: 0.2),
+                  width: 1,
                 ),
               ),
-            ],
-          ),
+              child: Row(
+                children: [
+                  ProfileAvatar(
+                    name: student.name,
+                    radius: isSmallScreen ? 18 : 20,
+                  ),
+                  SizedBox(width: isSmallScreen ? 10 : 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          student.name,
+                          style: GoogleFonts.poppins(
+                            fontSize: isSmallScreen ? 13 : 14,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'ID: ${student.studentId ?? 'N/A'}',
+                          style: GoogleFonts.poppins(
+                            fontSize: isSmallScreen ? 10 : 11,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isTeacher)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      color: Colors.red,
+                      iconSize: isSmallScreen ? 20 : 22,
+                      tooltip: 'Remove student',
+                      onPressed: () => _confirmDeleteStudent(student),
+                    ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -660,7 +776,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
               child: Text(
                 'No attendance records found.',
                 style: GoogleFonts.poppins(
-                    fontSize: isSmallScreen ? 14 : 16, fontWeight: FontWeight.w500),
+                  fontSize: isSmallScreen ? 14 : 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           )
@@ -676,9 +794,15 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
               itemCount: _attendanceRecords.length,
               itemBuilder: (context, index) {
                 final record = _attendanceRecords[index];
-                final statusText = record.status ?? (record.isPresent ? 'Present' : 'Absent');
-                final statusColor = record.isPresent ? Colors.green : Colors.red;
-                final dateStr = record.date.toLocal().toIso8601String().substring(0, 10);
+                final statusText =
+                    record.status ?? (record.isPresent ? 'Present' : 'Absent');
+                final statusColor = record.isPresent
+                    ? Colors.green
+                    : Colors.red;
+                final dateStr = record.date
+                    .toLocal()
+                    .toIso8601String()
+                    .substring(0, 10);
 
                 return Container(
                   margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 10),
@@ -687,7 +811,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                     color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.2),
                       width: 1,
                     ),
                   ),
@@ -700,7 +826,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
-                          statusText == 'Present' ? Icons.check_circle : Icons.cancel,
+                          statusText == 'Present'
+                              ? Icons.check_circle
+                              : Icons.cancel,
                           size: isSmallScreen ? 18 : 20,
                           color: statusColor,
                         ),
@@ -711,7 +839,8 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _studentNames[record.studentId] ?? 'Unknown student',
+                              _studentNames[record.studentId] ??
+                                  'Unknown student',
                               style: GoogleFonts.poppins(
                                 fontSize: isSmallScreen ? 13 : 14,
                                 fontWeight: FontWeight.w600,
@@ -725,7 +854,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                               dateStr,
                               style: GoogleFonts.poppins(
                                 fontSize: isSmallScreen ? 10 : 11,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -769,9 +900,10 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
         child: Text(
           'Error loading announcements: $_announcementsError',
           style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.red),
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            color: Colors.red,
+          ),
           textAlign: TextAlign.center,
         ),
       );
@@ -782,7 +914,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
         child: Text(
           'No announcements yet.',
           style: GoogleFonts.poppins(
-              fontSize: MediaQuery.of(context).size.width < 600 ? 14 : 16, fontWeight: FontWeight.w500),
+            fontSize: MediaQuery.of(context).size.width < 600 ? 14 : 16,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       );
     }
@@ -821,7 +955,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
             color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -840,7 +976,9 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                         ),
                         child: Icon(
                           Icons.announcement_rounded,
-                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
                           size: isSmallScreen ? 16 : 18,
                         ),
                       ),
@@ -891,15 +1029,16 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () async {
-                    final firestoreProvider =
-                        context.read<FirestoreProvider>();
+                    final firestoreProvider = context.read<FirestoreProvider>();
 
-                    final confirmDelete = await showDialog<bool>(
+                    final confirmDelete =
+                        await showDialog<bool>(
                           context: context,
                           builder: (context) => AlertDialog(
                             title: const Text('Delete Announcement'),
                             content: const Text(
-                                'Are you sure you want to delete this announcement?'),
+                              'Are you sure you want to delete this announcement?',
+                            ),
                             actions: [
                               TextButton(
                                 onPressed: () =>
@@ -921,24 +1060,25 @@ class _SectionDetailsScreenState extends State<SectionDetailsScreen>
 
                     try {
                       await firestoreProvider.deleteAnnouncement(
-                          announcement['id']);
+                        announcement['id'],
+                      );
 
                       if (!context.mounted) return;
 
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Announcement deleted')),
+                        const SnackBar(content: Text('Announcement deleted')),
                       );
 
                       _fetchAnnouncements();
                     } catch (e) {
                       if (!context.mounted) return;
 
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content:
-                            Text('Failed to delete announcement: $e'),
-                        backgroundColor: Colors.red,
-                      ));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to delete announcement: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
                     }
                   },
                 ),
